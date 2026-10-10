@@ -1,0 +1,10 @@
+{
+  "name": "Stikka SG",
+  "short_name": "Stikka SG",
+  "description": "Print stickers and labels from your browser — Edible Makerspace, Singapore.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F7F5",
+  "theme_color": "#F8F7F5",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -11,6 +11,11 @@ import { renderPDFPageAsDataURL } from './pdf'
 import { saveCustomFont, saveTheme, applyTheme, type Theme } from './static-config'
 import * as api from './mqtt-api'
 import { marked } from 'marked'
+import { iconPicker, type IconOption } from './icon-picker'
+import { createMapPicker } from './map-picker'
+import { createPrinterChips } from './printer-chips'
+import { buildFooter } from './footer'
+import { icon } from './icons'
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -141,6 +146,29 @@ function select<T extends string>(
     sel,
   )
 }
+
+const ROTATE_OPTS: IconOption<'0' | '90' | '180' | '270'>[] = [
+  { value: '0',   label: '0°',   icon: 'rot0',   title: 'No rotation' },
+  { value: '90',  label: '90°',  icon: 'rot90',  title: 'Rotate 90° clockwise' },
+  { value: '180', label: '180°', icon: 'rot180', title: 'Rotate 180°' },
+  { value: '270', label: '270°', icon: 'rot270', title: 'Rotate 270° clockwise' },
+]
+const H_ALIGN_OPTS: IconOption<'Left' | 'Center' | 'Right'>[] = [
+  { value: 'Left',   label: 'Left',   icon: 'alignLeft' },
+  { value: 'Center', label: 'Center', icon: 'alignCenter' },
+  { value: 'Right',  label: 'Right',  icon: 'alignRight' },
+]
+const V_ALIGN_OPTS: IconOption<'Top' | 'Center' | 'Bottom'>[] = [
+  { value: 'Top',    label: 'Top',    icon: 'alignTop' },
+  { value: 'Center', label: 'Middle', icon: 'alignMiddle', title: 'Vertically centered' },
+  { value: 'Bottom', label: 'Bottom', icon: 'alignBottom' },
+]
+const BARCODE_OPTS: IconOption<'QR' | 'Code128' | 'Aztec' | 'DataMatrix'>[] = [
+  { value: 'QR',         label: 'QR',          icon: 'qr',         title: 'QR code' },
+  { value: 'Code128',    label: 'Code 128',    icon: 'code128',    title: 'Code 128 (linear barcode)' },
+  { value: 'Aztec',      label: 'Aztec',       icon: 'aztec',      title: 'Aztec code' },
+  { value: 'DataMatrix', label: 'Data Matrix', icon: 'datamatrix', title: 'Data Matrix' },
+]
 
 function section(title: string, ...children: HTMLElement[]): HTMLDetailsElement {
   const details = el('details')
@@ -318,7 +346,7 @@ function buildImageControls(webcam: { open: () => void }): HTMLElement {
     ...(() => {
       const xOff = slider('X-Offset', -200, 200, 1, state.imgOffsetX, v => { state.imgOffsetX = v; schedulePreview() })
       const yOff = slider('Y-Offset', -200, 200, 1, state.imgOffsetY, v => { state.imgOffsetY = v; schedulePreview() })
-      const rot = select('Rotate Image', ['0', '90', '180', '270'] as const, String(state.rotateImageAngle) as '0', v => {
+      const rot = iconPicker('Rotate image', ROTATE_OPTS, String(state.rotateImageAngle) as '0', v => {
         state.rotateImageAngle = parseInt(v)
         state.imgOffsetX = 0; state.imgOffsetY = 0
         resetSlider(xOff, 0); resetSlider(yOff, 0)
@@ -377,12 +405,14 @@ function buildFontsTab(): HTMLElement {
       const localFont: FontInfo = { name, path: dataURL }
       await loadFont(localFont)
       state.fonts = [...state.fonts.filter(f => f.name !== name), localFont]
+      window.dispatchEvent(new Event('stikka:fonts-changed'))
 
       try {
         const sharedFont = await api.publishFont(name, file)
         state.fonts = [...state.fonts.filter(f => f.name !== name), sharedFont]
+        window.dispatchEvent(new Event('stikka:fonts-changed'))
         saveCustomFont(sharedFont)
-        showStatus(`Font "${name}" uploaded and shared. Pick it from the Font dropdown on the Label tab.`, true)
+        showStatus(`Font "${name}" uploaded and shared. Pick it from the font list on the Label tab.`, true)
       } catch (e) {
         // Still usable locally (loaded above + cached), just not shared to other browsers yet.
         saveCustomFont(localFont)
@@ -401,54 +431,53 @@ function buildFontsTab(): HTMLElement {
 
 function buildFontPicker(initial: string, onChange: (name: string) => void): HTMLElement {
   let current = initial || '(default)'
+  let query = ''
 
-  const labelEl = el('span', { class: 'font-picker-label' })
-  const listEl  = el('div',  { class: 'font-picker-list hidden' })
-  const root    = el('div',  { class: 'font-picker' }, labelEl, listEl)
+  const search = el('input', {
+    class: 'font-search', type: 'search', placeholder: 'Find a font…', 'aria-label': 'Search fonts',
+  }) as HTMLInputElement
+  const grid = el('div', { class: 'font-grid', role: 'listbox', 'aria-label': 'Fonts' })
+  const root = el('div', { class: 'font-picker' }, search, grid)
 
-  // Recomputed on every open so fonts uploaded via the Settings tab
-  // (which mutate state.fonts after this picker is first built) show up
-  // without needing to rebuild the whole panel.
+  // Recomputed on every render so fonts uploaded after this picker was built
+  // (state.fonts is mutated by the Fonts tab) show up without a rebuild.
   function getFonts(): FontInfo[] {
     const fonts = [{ name: '(default)', path: '' }, ...state.fonts]
-    if (!fonts.some(f => f.name === '5x5Tami')) {
-      fonts.push({ name: '5x5Tami', path: 'builtin' })
-    }
+    if (!fonts.some(f => f.name === '5x5Tami')) fonts.push({ name: '5x5Tami', path: 'builtin' })
     return fonts
   }
 
-  function updateLabel(): void {
-    labelEl.textContent = current
-    const f = getFonts().find(f => f.name === current)
-    ;(labelEl as HTMLElement).style.fontFamily = (f && f.path) ? `"${current}", sans-serif` : ''
-  }
-
-  function renderList(): void {
-    listEl.innerHTML = ''
-    getFonts().forEach(f => {
-      const item = el('div', { class: 'font-picker-item' }, f.name)
-      ;(item as HTMLElement).style.fontFamily = f.path ? `"${f.name}", sans-serif` : ''
-      if (f.name === current) item.classList.add('selected')
-      item.addEventListener('mousedown', e => {
-        e.preventDefault()
+  function render(): void {
+    const all = getFonts()
+    search.classList.toggle('hidden', all.length <= 8)
+    const q = query.trim().toLowerCase()
+    const list = q ? all.filter(f => f.name.toLowerCase().includes(q)) : all
+    grid.replaceChildren()
+    if (!list.length) grid.append(el('p', { class: 'font-empty' }, 'No fonts match.'))
+    for (const f of list) {
+      const on = f.name === current
+      const sample = el('span', { class: 'font-tile-sample' }, 'Aa')
+      if (f.path) sample.style.fontFamily = `"${f.name}", sans-serif`
+      const tile = el('button', {
+        class: 'font-tile' + (on ? ' selected' : ''), type: 'button', role: 'option',
+        'aria-selected': String(on), title: f.name,
+      },
+        sample,
+        el('span', { class: 'font-tile-name' }, f.name === '(default)' ? 'Default' : f.name),
+      )
+      tile.addEventListener('click', () => {
         current = f.name
-        listEl.querySelectorAll('.font-picker-item').forEach(i => i.classList.remove('selected'))
-        item.classList.add('selected')
-        updateLabel()
-        close()
+        render()
         onChange(f.name === '(default)' ? '' : f.name)
       })
-      listEl.append(item)
-    })
+      grid.append(tile)
+    }
+    grid.querySelector('.font-tile.selected')?.scrollIntoView({ block: 'nearest' })
   }
 
-  function close(): void { listEl.classList.add('hidden') }
-  function open(): void  { renderList(); listEl.classList.remove('hidden'); listEl.scrollTop = 0 }
-
-  labelEl.addEventListener('click', () => listEl.classList.contains('hidden') ? open() : close())
-  document.addEventListener('click', e => { if (!root.contains(e.target as Node)) close() })
-
-  updateLabel()
+  search.addEventListener('input', () => { query = search.value; render() })
+  window.addEventListener('stikka:fonts-changed', render)
+  render()
   return root
 }
 
@@ -472,17 +501,17 @@ function textElementFields(t: TextElement, isFirst: boolean, renderList: () => v
 
   return el('div', { class: 'text-element' },
     textArea,
-    el('div', { class: 'select-row' }, el('label', {}, 'Font'), fontPicker),
+    el('div', { class: 'field-block' }, el('span', { class: 'icon-field-label' }, 'Font'), fontPicker),
     slider('Size', 8, 200, 1, t.textSize, v => { t.textSize = v; schedulePreview() }),
     ...(() => {
       const xOff = slider('X-Offset', -500, 500, 1, t.textOffsetX, v => { t.textOffsetX = v; schedulePreview() })
       const yOff = slider('Y-Offset', -500, 500, 1, t.textOffsetY, v => { t.textOffsetY = v; schedulePreview() })
       const rot = slider('Rotate', -180, 180, 15, t.rotateText, v => { t.rotateText = v; schedulePreview() })
-      const hAlign = select('H-Align', ['Left', 'Center', 'Right'] as const, t.hAlign, v => {
+      const hAlign = iconPicker('Horizontal', H_ALIGN_OPTS, t.hAlign, v => {
         t.hAlign = v; t.textOffsetX = 0; t.rotateText = 0
         resetSlider(xOff, 0); resetSlider(rot, 0); schedulePreview()
       })
-      const vAlign = select('V-Align', ['Top', 'Center', 'Bottom'] as const, t.vAlign, v => {
+      const vAlign = iconPicker('Vertical', V_ALIGN_OPTS, t.vAlign, v => {
         t.vAlign = v; t.textOffsetY = 0; t.rotateText = 0
         resetSlider(yOff, 0); resetSlider(rot, 0); schedulePreview()
       })
@@ -539,26 +568,26 @@ function buildBarcodeControls(): HTMLElement {
 
   return section('Barcode',
     dataInput,
-    select('Type', ['QR', 'Code128', 'Aztec', 'DataMatrix'] as const, state.barcodeType, v => { state.barcodeType = v }),
+    iconPicker('Type', BARCODE_OPTS, state.barcodeType, v => { state.barcodeType = v }),
     slider('Size', 1, 10, 1, state.barcodeSize, v => { state.barcodeSize = v }),
-    el('div', { class: 'select-row' }, el('label', {}, 'Label Font'), fontPicker),
+    el('div', { class: 'field-block' }, el('span', { class: 'icon-field-label' }, 'Label font'), fontPicker),
     el('div', { class: 'toggle-row' },
       toggle('Barcode Label', state.barcodeLabel, v => { state.barcodeLabel = v; schedulePreview() }),
     ),
     ...(() => {
       const xOff = slider('X-Offset', -500, 500, 1, state.barcodeOffsetX, v => { state.barcodeOffsetX = v; schedulePreview() })
       const yOff = slider('Y-Offset', -500, 500, 1, state.barcodeOffsetY, v => { state.barcodeOffsetY = v; schedulePreview() })
-      const hAlign = select('H-Align', ['Left', 'Center', 'Right'] as const, state.barcodeHAlign, v => {
+      const hAlign = iconPicker('Horizontal', H_ALIGN_OPTS, state.barcodeHAlign, v => {
         state.barcodeHAlign = v; state.barcodeOffsetX = 0
         resetSlider(xOff, 0); schedulePreview()
       })
-      const vAlign = select('V-Align', ['Top', 'Center', 'Bottom'] as const, state.barcodeVAlign, v => {
+      const vAlign = iconPicker('Vertical', V_ALIGN_OPTS, state.barcodeVAlign, v => {
         state.barcodeVAlign = v; state.barcodeOffsetY = 0
         resetSlider(yOff, 0); schedulePreview()
       })
       return [hAlign, vAlign, xOff, yOff] as HTMLElement[]
     })(),
-    select('Rotate', ['0', '90', '180', '270'] as const, String(state.barcodeRotate) as '0', v => { state.barcodeRotate = parseInt(v); schedulePreview() }),
+    iconPicker('Rotate', ROTATE_OPTS, String(state.barcodeRotate) as '0', v => { state.barcodeRotate = parseInt(v); schedulePreview() }),
     el('div', { class: 'btn-row' }, generateBtn, clearBtn),
   )
 }
@@ -574,25 +603,15 @@ function buildZPLTab(): HTMLElement {
   let zplPrinters = state.printers.filter(p => isZplCompatible(p.type))
   let selectedZPLIndex = zplPrinters.length > 0 ? zplPrinters[0].index : -1
 
-  // Printer selector (ZPL-only)
-  const printerSel = el('select', { class: 'printer-select' })
+  // Printer chooser (ZPL-only): always-visible flag chips instead of a dropdown
+  const chips = createPrinterChips()
+  const printerSel = chips.element
   const renderZPLPrinterOptions = (): void => {
-    printerSel.innerHTML = ''
-    if (!zplPrinters.length) {
-      printerSel.append(el('option', { value: '-1' }, '(no ZPL printers configured)'))
-      selectedZPLIndex = -1
-      return
-    }
-    zplPrinters.forEach(p => {
-      const shape = p.label.length > 0
-        ? `${p.label.width}×${p.label.length}mm`
-        : `${p.label.width}mm endless`
-      const serial = p.serial ? ` · ${p.serial}` : ''
-      const location = p.location ? ` (${p.location})` : ''
-      const opt = el('option', { value: String(p.index) }, `${p.name}${serial}${location} · ${p.label.isRound ? 'ø' : ''}${shape}`)
-      if (p.index === selectedZPLIndex) opt.setAttribute('selected', '')
-      printerSel.append(opt)
-    })
+    chips.render(zplPrinters, selectedZPLIndex, idx => {
+      selectedZPLIndex = idx
+      renderZPLPrinterOptions()
+      scheduleZPLPreview()
+    }, 'No ZPL printers online')
   }
   renderZPLPrinterOptions()
 
@@ -605,10 +624,6 @@ function buildZPLTab(): HTMLElement {
     scheduleZPLPreview()
   })
   window.addEventListener('beforeunload', () => unsubscribe(), { once: true })
-  printerSel.addEventListener('change', () => {
-    selectedZPLIndex = parseInt((printerSel as HTMLSelectElement).value)
-    scheduleZPLPreview()
-  })
 
   const statusEl = el('div', { class: 'status-msg hidden' })
   let zplStatusTimer: number | null = null
@@ -708,25 +723,14 @@ function buildCableLabelTab(): HTMLElement {
   let zplPrinters = state.printers.filter(p => isZplCompatible(p.type))
   let selectedZPLIndex = zplPrinters.length > 0 ? zplPrinters[0].index : -1
 
-  // Printer selector (ZPL-only)
-  const printerSel = el('select', { class: 'printer-select' })
+  // Printer chooser (ZPL-only): always-visible flag chips instead of a dropdown
+  const chips = createPrinterChips()
+  const printerSel = chips.element
   const renderCablePrinterOptions = (): void => {
-    printerSel.innerHTML = ''
-    if (!zplPrinters.length) {
-      printerSel.append(el('option', { value: '-1' }, '(no ZPL printers configured)'))
-      selectedZPLIndex = -1
-      return
-    }
-    zplPrinters.forEach(p => {
-      const shape = p.label.length > 0
-        ? `${p.label.width}×${p.label.length}mm`
-        : `${p.label.width}mm endless`
-      const serial = p.serial ? ` · ${p.serial}` : ''
-      const location = p.location ? ` (${p.location})` : ''
-      const opt = el('option', { value: String(p.index) }, `${p.name}${serial}${location} · ${p.label.isRound ? 'ø' : ''}${shape}`)
-      if (p.index === selectedZPLIndex) opt.setAttribute('selected', '')
-      printerSel.append(opt)
-    })
+    chips.render(zplPrinters, selectedZPLIndex, idx => {
+      selectedZPLIndex = idx
+      renderCablePrinterOptions()
+    }, 'No ZPL printers online')
   }
   renderCablePrinterOptions()
 
@@ -738,9 +742,6 @@ function buildCableLabelTab(): HTMLElement {
     renderCablePrinterOptions()
   })
   window.addEventListener('beforeunload', () => unsubscribe(), { once: true })
-  printerSel.addEventListener('change', () => {
-    selectedZPLIndex = parseInt((printerSel as HTMLSelectElement).value)
-  })
 
   const statusEl = el('div', { class: 'status-msg hidden' })
   let zplStatusTimer: number | null = null
@@ -1094,21 +1095,28 @@ export async function initApp(
     try { pendingPrinterSlug = slugify(decodeURIComponent(rawHashSlug)) }
     catch { pendingPrinterSlug = slugify(rawHashSlug) }
   }
-  const printerSel = el('select', { class: 'printer-select' })
   const mqttStateEl = el('div', { class: 'status-msg hidden' })
 
+  const mapPicker = createMapPicker({
+    getMeta: i => api.getMQTTPrinterMetaByIndex(i),
+    isDummy: name => api.isDummyPrinter(name),
+    onSelect: i => selectPrinter(i),
+  })
+
   function renderPrinterOptions(): void {
-    printerSel.innerHTML = ''
-    if (!state.printers.length) {
-      printerSel.append(el('option', { value: '-1' }, '(no printers configured)'))
-      state.selectedPrinterIndex = -1
-      return
+    mapPicker.update(state.printers, state.selectedPrinterIndex)
+    // Keep the URL shareable: #<printer-slug> preselects this printer on load.
+    const sel = state.printers[state.selectedPrinterIndex]
+    if (sel && !api.isDummyPrinter(sel.name) && !pendingPrinterSlug) {
+      history.replaceState(null, '', '#' + slugify(sel.name))
     }
-    state.printers.forEach((p, i) => {
-      const o = el('option', { value: String(i) }, printerLabel(p))
-      if (i === state.selectedPrinterIndex) o.setAttribute('selected', '')
-      printerSel.append(o)
-    })
+  }
+
+  function selectPrinter(i: number): void {
+    state.selectedPrinterIndex = i
+    renderPrinterOptions()
+    updateMQTTStateHint()
+    schedulePreview()
   }
 
   function updateMQTTStateHint(): void {
@@ -1148,12 +1156,6 @@ export async function initApp(
   }
 
   renderPrinterOptions()
-
-  printerSel.addEventListener('change', () => {
-    state.selectedPrinterIndex = parseInt((printerSel as HTMLSelectElement).value)
-    updateMQTTStateHint()
-    schedulePreview()
-  })
 
   const printerSubscription = api.subscribeMQTTPrinters((printers) => {
     const currentName = state.printers[state.selectedPrinterIndex]?.name ?? ''
@@ -1228,6 +1230,9 @@ export async function initApp(
     }
   })
 
+  printBtn.innerHTML = icon('printer', 20) + '<span>Print Stikka</span>'
+  downloadBtn.innerHTML = icon('download', 20) + '<span>Download</span>'
+
   // ── Tab system ──
   const allTabs: Array<{ name: string; panel: HTMLElement }> = [
     { name: 'Label',   panel: el('div', { class: 'tab-panel active', id: 'tab-label' }) },
@@ -1246,15 +1251,18 @@ export async function initApp(
     const isRightGroup = rightTabNames.has(name)
     const isRightStart = i === firstRightTabIndex
     const b = el('button', {
+      role: 'tab',
+      'aria-selected': String(i === 0),
       class: 'tab-btn'
         + (i === 0 ? ' active' : '')
         + (isRightGroup ? ' tab-btn-right-group' : '')
         + (isRightStart ? ' tab-btn-right' : ''),
     }, name)
     b.addEventListener('click', () => {
-      tabBtns.forEach(tb => tb.classList.remove('active'))
+      tabBtns.forEach(tb => { tb.classList.remove('active'); tb.setAttribute('aria-selected', 'false') })
       tabPanels.forEach(tp => tp.classList.remove('active'))
       b.classList.add('active')
+      b.setAttribute('aria-selected', 'true')
       tabPanels[i].classList.add('active')
     })
     tabBtns.push(b)
@@ -1262,25 +1270,32 @@ export async function initApp(
 
   // ── Theme control ──
   const themeAttr = document.documentElement.dataset.theme
-  const currentTheme = (themeAttr === 'dark' || themeAttr === 'haxor' ? themeAttr : 'light') as Theme
-  const themeSelect = select('Theme', ['light', 'dark', 'haxor'] as const, currentTheme, v => {
+  const currentTheme = (['edible', 'light', 'dark', 'haxor'].includes(themeAttr ?? '') ? themeAttr : 'edible') as Theme
+  const THEME_OPTS: IconOption<Theme>[] = [
+    { value: 'edible', label: 'Edible', icon: 'leaf',     title: 'Edible Makerspace (default)' },
+    { value: 'light',  label: 'Light',  icon: 'sun',      title: 'Light' },
+    { value: 'dark',   label: 'Dark',   icon: 'moon',     title: 'Dark' },
+    { value: 'haxor',  label: 'Haxor',  icon: 'terminal', title: 'Haxor' },
+  ]
+  const themeSelect = iconPicker('Theme', THEME_OPTS, currentTheme, v => {
     applyTheme(v)
     saveTheme(v)
+  }, { iconOnly: true, compact: true, className: 'theme-picker' })
+  // On phones only the active theme icon is shown (see components.css); tapping it cycles to the next theme.
+  themeSelect.addEventListener('click', e => {
+    if (!e.isTrusted) return   // ignore the synthetic click below, or it would cycle again
+    const btn = (e.target as HTMLElement).closest('.icon-opt') as HTMLElement | null
+    if (!btn || !btn.classList.contains('selected') || !window.matchMedia('(max-width: 700px)').matches) return
+    const all = [...themeSelect.querySelectorAll<HTMLElement>('.icon-opt')]
+    all[(all.indexOf(btn) + 1) % all.length].click()
   })
-  themeSelect.classList.add('theme-select-row')
 
   // ── Label tab layout ──
   const labelTab = tabPanels[0]
   labelTab.append(
-    // Printer row
-    el('div', { class: 'printer-row' },
-      printerSel,
-      downloadBtn,
-      printBtn,
-    ),
+    mapPicker.element,
     statusEl,
     mqttStateEl,
-    el('hr', {}),
     // Main grid: preview | controls
     el('div', { class: 'main-grid' },
       // Left: preview + upload
@@ -1295,6 +1310,7 @@ export async function initApp(
         buildBarcodeControls(),
       ),
     ),
+    el('div', { class: 'action-bar' }, downloadBtn, printBtn),
   )
 
   // ── Other tabs ──
@@ -1308,22 +1324,19 @@ export async function initApp(
   // ── Root structure ──
   appEl.innerHTML = ''
   appEl.append(
-    el('div', { class: 'github-ribbon' },
-      el('a', {
-        href: 'https://github.com/stikka-factory/stikka-mqtt',
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        'aria-label': 'Fork me on GitHub',
-      }, 'Fork me on GitHub'),
-    ),
+    el('a', { class: 'skip-link', href: '#main' }, 'Skip to content'),
     el('header', { class: 'app-header' },
-      el('div', { class: 'header-title' }, appName),
-      ...(appSubtitle ? [el('div', { class: 'header-subtitle' }, appSubtitle)] : []),
+      (() => { const m = el('span', { class: 'brand-mark' }); m.innerHTML = icon('brand', 44); return m })(),
+      el('div', { class: 'header-text' },
+        el('h1', { class: 'header-title' }, appName),
+        ...(appSubtitle ? [el('div', { class: 'header-subtitle' }, appSubtitle)] : []),
+      ),
     ),
-    el('main', { class: 'app-main' },
-      el('div', { class: 'tab-bar' }, ...tabBtns, themeSelect),
+    el('main', { class: 'app-main', id: 'main' },
+      el('div', { class: 'tab-bar' }, el('div', { class: 'tab-scroll', role: 'tablist' }, ...tabBtns), themeSelect),
       ...tabPanels,
     ),
+    buildFooter(appName),
   )
 
   // Initial preview

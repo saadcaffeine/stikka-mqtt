@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About Stikka SG – FAQ, supported printers &amp; how to add yours</title>
+  <meta name="description" content="What Stikka SG is, how browser-to-printer label printing works over MQTT, which printers and ESP32 boards are supported, and how to put your own printer on the map. Hosted by Edible Makerspace, Singapore." />
+  <link rel="canonical" href="https://stikka.ediblemakerspace.com/about/" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="theme-color" content="#F8F7F5" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="About Stikka SG – FAQ and how to add your own printer" />
+  <meta property="og:description" content="Open-source sticker and label printing from your browser, hosted by Edible Makerspace in Singapore." />
+  <meta property="og:url" content="https://stikka.ediblemakerspace.com/about/" />
+  <meta property="og:image" content="https://stikka.ediblemakerspace.com/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Stikka SG", "item": "https://stikka.ediblemakerspace.com/" },
+          { "@type": "ListItem", "position": 2, "name": "About", "item": "https://stikka.ediblemakerspace.com/about/" }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "What is Stikka SG?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Stikka SG is the Singapore instance of Stikka, a free, open-source web app for designing and printing stickers and labels on label printers anywhere in the world. It is hosted by Edible Makerspace." } },
+          { "@type": "Question", "name": "How does printing work without a print server?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Your browser renders the label itself, then publishes the finished job over MQTT to the printer's ESP32 bridge, which forwards it to the label printer. There is no server in between." } },
+          { "@type": "Question", "name": "Which printers does Stikka support?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Zebra printers using ZPL (over the network or USB), Brother QL printers over USB host, and Seiko SLP printers over USB." } },
+          { "@type": "Question", "name": "Which ESP32 board do I need?",
+            "acceptedAnswer": { "@type": "Answer", "text": "The ESP32-S3 DevKitC-1 in the N16R8 version (16 MB flash, 8 MB PSRAM). The extra memory is needed to handle label images." } },
+          { "@type": "Question", "name": "How do I add my printer to the map?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Flash the bridge firmware from the ESP32 Flasher tab, join the board's setup network or open its web page, then set a printer name and a Location such as a city or country name. The printer appears on the map with its country flag within about a minute." } },
+          { "@type": "Question", "name": "Is Stikka free?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. The software is open source and free to use, and no account is needed." } }
+        ]
+      }
+    ]
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#F8F7F5; --ink:#191919; --dim:#5F5F5F; --line:#E4DFD6; --accent:#C23B28; --yellow:#F0C400; --cream:#F1EEE9 }
+    * { box-sizing: border-box }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 Manrope, system-ui, -apple-system, 'Segoe UI', sans-serif }
+    header, main, footer { max-width: 46rem; margin: 0 auto; padding: 0 1rem }
+    header { padding-top: 1.5rem; display: flex; align-items: center; gap: .7rem }
+    header a { color: var(--ink); font-weight: 800; text-decoration: none; font-size: 1.2rem }
+    h1 { font-size: clamp(1.7rem, 5vw, 2.3rem); line-height: 1.2; margin: 1.5rem 0 .5rem; letter-spacing: -.02em }
+    h2 { font-size: 1.25rem; margin: 2rem 0 .5rem; padding-left: .7rem; border-left: 4px solid var(--yellow) }
+    h3 { font-size: 1.02rem; margin: 1.3rem 0 .2rem }
+    p, li { color: var(--dim) }
+    a { color: var(--accent) }
+    .lead { font-size: 1.1rem }
+    .cta { display: inline-block; margin: .5rem 0 1rem; padding: .75rem 1.5rem; background: var(--accent); color: #fff; font-weight: 700; border-radius: 999px; text-decoration: none }
+    table { border-collapse: collapse; width: 100%; margin: .5rem 0 }
+    th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); font-size: .92rem; color: var(--dim) }
+    th { color: var(--ink) }
+    footer { padding-bottom: 3rem; margin-top: 2.5rem; border-top: 1px solid var(--line); padding-top: 1.2rem; font-size: .9rem }
+    footer ul { padding-left: 1.1rem }
+    :focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px }
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12L21 6.8A10.4 10.4 0 1 0 21 17.2z" fill="#F0C400"/></svg>
+    <a href="/">Stikka SG</a>
+  </header>
+  <main>
+    <h1>About Stikka SG</h1>
+    <p class="lead">Stikka SG is the Singapore instance of <a href="https://github.com/stikka-factory/stikka-mqtt">Stikka</a>, a free, open-source web app for printing stickers and labels on label printers anywhere in the world. It is hosted by <a href="https://ediblemakerspace.com/">Edible Makerspace</a>, an open-source, DIY bio-hacker makerspace exploring food futures.</p>
+    <a class="cta" href="/">Open the label printer</a>
+
+    <h2>How it works</h2>
+    <ol>
+      <li><strong>Design</strong> a label in your browser — an image, text, a QR code, Code 128, Aztec or Data Matrix code. Nothing is uploaded; everything is rendered locally.</li>
+      <li><strong>Pick a printer</strong> on the world map. Every printer is an ESP32 board wired to a label printer, and it appears as a flag pin at the location it reports.</li>
+      <li><strong>Print.</strong> The finished label travels over MQTT directly to that printer's ESP32 bridge, which forwards it to the label printer. There is no print server in between.</li>
+    </ol>
+
+    <h2>Supported hardware</h2>
+    <table>
+      <thead><tr><th>Printer</th><th>Connection</th></tr></thead>
+      <tbody>
+        <tr><td>Zebra (ZPL)</td><td>Network, or USB</td></tr>
+        <tr><td>Brother QL</td><td>USB (the ESP32 acts as USB host)</td></tr>
+        <tr><td>Seiko SLP</td><td>USB</td></tr>
+      </tbody>
+    </table>
+    <p>Bridge board: ESP32-S3 DevKitC-1, N16R8 version (16&nbsp;MB flash, 8&nbsp;MB PSRAM).</p>
+
+    <h2>Add your printer to the map</h2>
+    <ol>
+      <li>Flash the bridge firmware from the <em>ESP32 Flasher</em> tab of the app.</li>
+      <li>Join the board's own <code>Stikka-XXXXXX</code> WiFi network (password <code>stikkaesp32</code>) and open <code>http://1.2.3.4</code>.</li>
+      <li>Enter your WiFi, choose the printer type, give the printer a name and set its <strong>Location</strong> — a city or country such as <em>Berlin</em> or <em>Singapore</em>, or exact coordinates like <code>My Space @1.35,103.82</code>.</li>
+      <li>Within about a minute it shows up on the map with its country flag.</li>
+    </ol>
+
+    <h2>Frequently asked questions</h2>
+    <h3>What is Stikka SG?</h3>
+    <p>The Singapore instance of the open-source Stikka label-printing app, hosted by Edible Makerspace.</p>
+    <h3>How does printing work without a print server?</h3>
+    <p>Your browser renders the label itself, then publishes the finished job over MQTT to the printer's ESP32 bridge, which forwards it to the label printer.</p>
+    <h3>Which printers does Stikka support?</h3>
+    <p>Zebra printers using ZPL (over the network or USB), Brother QL printers over USB host, and Seiko SLP printers over USB.</p>
+    <h3>Which ESP32 board do I need?</h3>
+    <p>The ESP32-S3 DevKitC-1 in the N16R8 version. The extra memory is needed to handle label images.</p>
+    <h3>How do I add my printer to the map?</h3>
+    <p>Flash the firmware, open the board's setup page and set a printer name and a Location. See the steps above.</p>
+    <h3>Is Stikka free?</h3>
+    <p>Yes. The software is open source and free to use, and no account is needed.</p>
+  </main>
+  <footer>
+    <ul>
+      <li><a href="/">Stikka SG web app</a></li>
+      <li><a href="https://github.com/stikka-factory/stikka-mqtt">stikka-mqtt on GitHub</a> (upstream) · <a href="https://github.com/saadcaffeine/stikka-mqtt">this instance's source</a> · <a href="https://github.com/stikka-factory/stikka-esp32">stikka-esp32 firmware</a></li>
+      <li><a href="https://stikka-factory.github.io/stikka-mqtt/">Stikka Factory main instance</a></li>
+      <li><a href="https://ediblemakerspace.com/">Edible Makerspace</a> · <a href="https://linktr.ee/ediblemakerspace">link tree</a></li>
+    </ul>
+  </footer>
+</body>
+</html>

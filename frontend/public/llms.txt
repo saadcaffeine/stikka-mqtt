@@ -1,0 +1,22 @@
+# Stikka SG
+
+> Stikka SG is the Singapore instance of Stikka, a free, open-source web app for designing and printing stickers and labels on Zebra (ZPL), Brother QL and Seiko label printers anywhere in the world. It is hosted by Edible Makerspace, an open-source DIY bio-hacker makerspace in Singapore.
+
+Labels are designed and rendered entirely in the browser. Each printer is an ESP32 board wired to a label printer; the browser sends the finished label to it over MQTT, so there is no print server in between. Printers announce themselves and appear as flag pins on a world map, placed using the "Location" set in each printer's setup page.
+
+## Pages
+- [Stikka SG web app](https://stikka.ediblemakerspace.com/): design a label, pick a printer on the map, print
+- [About, FAQ and adding your own printer](https://stikka.ediblemakerspace.com/about/): what Stikka is, how it works, supported printers and boards
+
+## Source and related projects
+- [stikka-mqtt (web app, upstream)](https://github.com/stikka-factory/stikka-mqtt): the open-source project this instance is based on
+- [stikka-esp32 (printer bridge firmware)](https://github.com/stikka-factory/stikka-esp32): ESP32-S3 firmware that connects a label printer to MQTT
+- [This instance's source](https://github.com/saadcaffeine/stikka-mqtt): Singapore fork
+- [Stikka Factory main instance](https://stikka-factory.github.io/stikka-mqtt/): the original public instance
+- [Edible Makerspace](https://ediblemakerspace.com/): the makerspace hosting this instance
+
+## Facts
+- Supported printers: Zebra / ZPL (network or USB), Brother QL (USB host), Seiko SLP (USB)
+- Supported bridge board: ESP32-S3 DevKitC-1 N16R8
+- Barcode types: QR, Code 128, Aztec, Data Matrix
+- Cost: free; no account needed

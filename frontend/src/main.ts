@@ -1,5 +1,6 @@
 import './layout.css'
 import './style.css'
+import './components.css'
 import { defaultState } from './types'
 import { fetchAppInfo, fetchPrinters, fetchFonts, initTransport } from './mqtt-api'
 import { initApp } from './ui'
@@ -9,11 +10,14 @@ async function main(): Promise<void> {
   const appEl = document.getElementById('app')
   if (!appEl) return
 
-  appEl.textContent = 'Loading…'
+  // index.html ships crawlable fallback content inside #app; it stays visible
+  // (with a spinner) until the app below replaces it.
+  appEl.classList.add('is-loading')
 
   const state = defaultState()
   const staticConfig = await loadStaticModeConfig()
   if (!staticConfig) {
+    appEl.classList.remove('is-loading')
     appEl.textContent = 'Missing frontend/public/config.json for MQTT mode.'
     return
   }
@@ -22,6 +26,7 @@ async function main(): Promise<void> {
     await initTransport(staticConfig)
   } catch (e) {
     console.warn('Could not initialize MQTT transport:', e)
+    appEl.classList.remove('is-loading')
     appEl.textContent = 'Could not initialize MQTT transport. Check config.json MQTT settings.'
     return
   }
@@ -49,7 +54,8 @@ async function main(): Promise<void> {
     console.warn('Could not load config from server:', e)
   }
 
-  document.title = appName
+  // <title> is set statically in index.html for search/AI crawlers; keep it.
+  appEl.classList.remove('is-loading')
   await initApp(
     appEl,
     state,

@@ -1,0 +1,29 @@
+# Stikka SG — everyone, including search and AI answer engines, is welcome.
+User-agent: *
+Allow: /
+
+# Explicitly welcome AI search / answer-engine crawlers
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+User-agent: Claude-User
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: Bingbot
+Allow: /
+
+Sitemap: https://stikka.ediblemakerspace.com/sitemap.xml
