@@ -10,7 +10,7 @@ export default defineConfig({
   // 404s on the base path without it (e.g. `/stikka-mqtt`) -- the dev
   // server's own printed "Local:" URL already includes it, so this only
   // bites if you type the URL by hand.
-  base: '/stikka-mqtt/',
+  base: process.env.VITE_BASE || '/',
   server: {
     proxy: {
       '/api': 'http://localhost:8000',
