@@ -6,6 +6,14 @@ import { fetchAppInfo, fetchPrinters, fetchFonts, initTransport } from './mqtt-a
 import { initApp } from './ui'
 import { loadStaticModeConfig, loadCustomFonts } from './static-config'
 
+function boot(text?: string): void {
+  const el = document.getElementById('boot')
+  if (!el) return
+  if (text === undefined) { el.remove(); return }
+  const t = document.getElementById('boot-text')
+  if (t) t.textContent = text
+}
+
 async function main(): Promise<void> {
   const appEl = document.getElementById('app')
   if (!appEl) return
@@ -15,17 +23,21 @@ async function main(): Promise<void> {
   appEl.classList.add('is-loading')
 
   const state = defaultState()
+  boot('Loading settings…')
   const staticConfig = await loadStaticModeConfig()
   if (!staticConfig) {
+    boot()
     appEl.classList.remove('is-loading')
     appEl.textContent = 'Missing frontend/public/config.json for MQTT mode.'
     return
   }
 
+  boot('Connecting to the print network…')
   try {
     await initTransport(staticConfig)
   } catch (e) {
     console.warn('Could not initialize MQTT transport:', e)
+    boot()
     appEl.classList.remove('is-loading')
     appEl.textContent = 'Could not initialize MQTT transport. Check config.json MQTT settings.'
     return
@@ -37,6 +49,7 @@ async function main(): Promise<void> {
   let cableLabelEnabled = false
   let textOverlayEnabled = true
 
+  boot('Finding printers and fonts…')
   try {
     const [info, printers, fonts] = await Promise.all([fetchAppInfo(), fetchPrinters(), fetchFonts()])
     appName = info.name
@@ -55,6 +68,7 @@ async function main(): Promise<void> {
   }
 
   // <title> is set statically in index.html for search/AI crawlers; keep it.
+  boot('Starting…')
   appEl.classList.remove('is-loading')
   await initApp(
     appEl,
@@ -65,6 +79,7 @@ async function main(): Promise<void> {
     cableLabelEnabled,
     textOverlayEnabled,
   )
+  boot()
 }
 
 main()

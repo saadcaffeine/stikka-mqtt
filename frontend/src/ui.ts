@@ -1158,9 +1158,12 @@ export async function initApp(
   })
 
   let printBtnReady = false   // printBtn is created further down
+  // Greyed out until every printer's status has been fetched (see mqtt-api printersReady).
+  let pickerLoading = !api.printersReady()
+  let userPickedPrinter = false
 
   function renderPrinterOptions(): void {
-    mapPicker.update(state.printers, state.selectedPrinterIndex)
+    mapPicker.update(pickerLoading ? [] : state.printers, pickerLoading ? -1 : state.selectedPrinterIndex)
     if (printBtnReady) stylePrintButton()
     // Keep the URL shareable: #<printer-slug> preselects this printer on load.
     const sel = state.printers[state.selectedPrinterIndex]
@@ -1170,6 +1173,8 @@ export async function initApp(
   }
 
   function selectPrinter(i: number): void {
+    if (pickerLoading) return
+    userPickedPrinter = true
     state.selectedPrinterIndex = i
     renderPrinterOptions()
     updateMQTTStateHint()
@@ -1214,35 +1219,68 @@ export async function initApp(
     mqttStateEl.classList.remove('hidden')
   }
 
+  if (pickerLoading) {
+    state.selectedPrinterIndex = -1
+    mapPicker.setLoading(true)
+  } else {
+    // Statuses were already fetched during startup, so pick the default now
+    // rather than flashing the first printer in the list.
+    applySelection(state.printers)
+  }
   renderPrinterOptions()
 
-  const printerSubscription = api.subscribeMQTTPrinters((printers) => {
+  // Choose which printer is selected: a `#slug` in the URL wins, then a
+  // printer the user picked themselves, then Singapore (if online), then any
+  // online printer. Until the user clicks one, a Singapore printer that
+  // appears later (e.g. its status arrives after the others) still wins.
+  function applySelection(printers: PrinterInfo[]): void {
     const currentName = state.printers[state.selectedPrinterIndex]?.name ?? ''
     state.printers = printers
-
-    if (!printers.length) {
-      state.selectedPrinterIndex = -1
-    } else {
-      const urlMatch = pendingPrinterSlug
-        ? printers.findIndex(p => slugify(p.name) === pendingPrinterSlug)
-        : -1
-      if (urlMatch >= 0) {
-        state.selectedPrinterIndex = urlMatch
-        pendingPrinterSlug = null
-      } else {
-        const match = printers.findIndex(p => p.name === currentName)
-        state.selectedPrinterIndex = match >= 0 ? match : pickDefaultPrinter(
-          printers,
-          i => api.getMQTTPrinterMetaByIndex(i)?.online === true,
-          p => !api.isDummyPrinter(p.name) && resolveLocation(p.location, p.name)?.cc === 'SG',
-        )
-      }
+    if (!printers.length) { state.selectedPrinterIndex = -1; return }
+    const urlMatch = pendingPrinterSlug
+      ? printers.findIndex(p => slugify(p.name) === pendingPrinterSlug)
+      : -1
+    if (urlMatch >= 0) {
+      state.selectedPrinterIndex = urlMatch
+      pendingPrinterSlug = null
+      return
     }
+    const keep = userPickedPrinter ? printers.findIndex(p => p.name === currentName) : -1
+    state.selectedPrinterIndex = keep >= 0 ? keep : pickDefaultPrinter(
+      printers,
+      i => api.getMQTTPrinterMetaByIndex(i)?.online === true,
+      p => !api.isDummyPrinter(p.name) && resolveLocation(p.location, p.name)?.cc === 'SG',
+    )
+  }
 
+  function finishLoading(): void {
+    if (!pickerLoading) return
+    pickerLoading = false
+    mapPicker.setLoading(false)
+  }
+
+  const printerSubscription = api.subscribeMQTTPrinters((printers) => {
+    if (api.printersReady()) {
+      applySelection(printers)
+      finishLoading()
+    } else {
+      state.printers = printers
+    }
     renderPrinterOptions()
     updateMQTTStateHint()
     schedulePreview()
   })
+
+  if (pickerLoading) {
+    // If the printer list never arrives (database unreachable), don't leave
+    // the picker greyed out forever.
+    window.setTimeout(() => {
+      if (!pickerLoading) return
+      finishLoading()
+      renderPrinterOptions()
+      updateMQTTStateHint()
+    }, 15_000)
+  }
 
   window.addEventListener('beforeunload', () => printerSubscription(), { once: true })
   updateMQTTStateHint()
@@ -1296,13 +1334,15 @@ export async function initApp(
 
   function stylePrintButton(): void {
     const sel = state.printers[state.selectedPrinterIndex]
-    if (!sel || api.isDummyPrinter(sel.name)) {
+    if (pickerLoading || !sel || api.isDummyPrinter(sel.name)) {
       printBtn.style.removeProperty('--printer-color')
       printBtn.classList.remove('has-printer-color')
-      printBtn.innerHTML = icon('printer', 20) + '<span>Print Stikka</span>'
+      printBtn.innerHTML = icon('printer', 20) + `<span>${pickerLoading ? 'Finding printers…' : 'Print Stikka'}</span>`
       printBtn.title = ''
+      printBtn.disabled = pickerLoading
       return
     }
+    printBtn.disabled = false
     const st = printerStyle(sel.name)
     printBtn.style.setProperty('--printer-color', st.color)
     printBtn.classList.add('has-printer-color')

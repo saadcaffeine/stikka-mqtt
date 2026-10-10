@@ -56,6 +56,13 @@ let cachedStats: PrintStats = zeroStats()
 const statsListeners = new Set<() => void>()
 
 let cachedPrinterEntries: SupabasePrinterEntry[] = []
+// True once the printer table (with every printer's online/busy/last-seen
+// status) has been fetched successfully at least once.
+let printersLoaded = false
+
+export function printersReady(): boolean {
+  return printersLoaded
+}
 const printerListeners = new Set<() => void>()
 let printerRefreshIntervalId: number | null = null
 
@@ -171,6 +178,7 @@ async function refreshPrinters(): Promise<void> {
   try {
     cachedPrinterEntries = await fetchSupabasePrinters()
     trackStatusChanges(cachedPrinterEntries)
+    printersLoaded = true
   } catch (e) {
     console.warn('Could not fetch printers from Supabase:', e)
   }

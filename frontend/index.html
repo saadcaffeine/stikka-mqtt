@@ -106,9 +106,21 @@
       /* Critical styles for the pre-app shell */
       html, body { margin: 0; background: #F8F7F5; color: #191919; font-family: Manrope, system-ui, -apple-system, 'Segoe UI', sans-serif }
       .seo-shell { max-width: 46rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.6 }
+      #boot { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.1rem; background: #F8F7F5; color: #191919; text-align: center; padding: 1rem }
+      #boot .boot-spinner { width: 72px; height: 72px; border-radius: 50%; border: 7px solid #e6e1da; border-top-color: #C23B28; border-right-color: #F0C400; animation: boot-spin .9s linear infinite }
+      #boot .boot-title { font-size: 1.5rem; font-weight: 800 }
+      #boot .boot-text { font-size: 1rem; color: #5b5750; min-height: 1.5em }
+      @keyframes boot-spin { to { transform: rotate(360deg) } }
+      @media (prefers-reduced-motion: reduce) { #boot .boot-spinner { animation-duration: 3s } }
     </style>
+    <noscript><style>#boot { display: none }</style></noscript>
   </head>
   <body>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-spinner" aria-hidden="true"></div>
+      <div class="boot-title">Stikka SG</div>
+      <div class="boot-text" id="boot-text">Starting…</div>
+    </div>
     <div id="app">
       <!-- Crawlable fallback. Search engines and AI crawlers that don't run JavaScript read this;
            it is replaced by the app once it loads. -->

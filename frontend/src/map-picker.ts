@@ -29,6 +29,8 @@ export interface MapPickerOptions {
 
 export interface MapPicker {
   element: HTMLElement
+  /** Grey the picker out and show a spinner while printer statuses load. */
+  setLoading(on: boolean): void
   update(printers: PrinterInfo[], selectedIndex: number): void
 }
 
@@ -144,6 +146,17 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
     if (!collapsed) requestAnimationFrame(() => renderPins())
   })
   applyCollapsed()
+
+  const loadingEl = h('div', 'map-loading', h('span', 'spinner spinner-lg'), h('span', 'map-loading-text', 'Checking which printers are online…'))
+  loadingEl.setAttribute('role', 'status')
+  loadingEl.hidden = true
+  root.append(loadingEl)
+  function setLoading(on: boolean): void {
+    root.classList.toggle('is-loading', on)
+    root.setAttribute('aria-busy', String(on))
+    loadingEl.hidden = !on
+    toggle.disabled = on
+  }
 
   // ── viewBox (zoom / pan) ──────────────────────────────────────────────────
   const ASPECT = MAP_H / MAP_W
@@ -438,5 +451,5 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
     for (const [el, e] of timeEls) el.textContent = timingText(e)
     renderSummary()
   }, 10_000)
-  return { element: root, update }
+  return { element: root, update, setLoading }
 }
