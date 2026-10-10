@@ -140,9 +140,37 @@ export async function initTransport(config: StaticModeConfig): Promise<void> {
   subscribeSupabaseStats(() => { void refreshStats() })
 }
 
+// When this browser first saw each printer in its current state. The server
+// only keeps the latest heartbeat, so "status changed" is as observed here;
+// it is persisted so a page reload doesn't reset it.
+const STATUS_KEY = 'stikka.statusSince.v1'
+type StatusRecord = { state: string; since: number }
+let statusSince: Record<string, StatusRecord> = {}
+try { statusSince = JSON.parse(localStorage.getItem(STATUS_KEY) ?? '{}') } catch { statusSince = {} }
+
+function trackStatusChanges(entries: SupabasePrinterEntry[]): void {
+  const now = Date.now()
+  let changed = false
+  for (const e of entries) {
+    const state = !e.online ? 'offline' : e.busy ? 'busy' : 'online'
+    const prev = statusSince[e.printer.name]
+    if (!prev || prev.state !== state) {
+      // First sighting: an offline printer has been quiet since its last
+      // heartbeat, which is a better answer than "now".
+      const since = !prev && state === 'offline' && e.lastSeen ? e.lastSeen : now
+      statusSince[e.printer.name] = { state, since }
+      changed = true
+    }
+  }
+  if (changed) {
+    try { localStorage.setItem(STATUS_KEY, JSON.stringify(statusSince)) } catch { /* private mode */ }
+  }
+}
+
 async function refreshPrinters(): Promise<void> {
   try {
     cachedPrinterEntries = await fetchSupabasePrinters()
+    trackStatusChanges(cachedPrinterEntries)
   } catch (e) {
     console.warn('Could not fetch printers from Supabase:', e)
   }
@@ -386,10 +414,26 @@ export function subscribeMQTTConnection(onChange: () => void): () => void {
   return onMQTTStatusChanged(onChange)
 }
 
-export function getMQTTPrinterMetaByIndex(printerIndex: number): { online: boolean; busy: boolean; lastError: string | null } | null {
+export interface PrinterMeta {
+  online: boolean
+  busy: boolean
+  lastError: string | null
+  /** epoch ms of the last heartbeat the server saw, or null */
+  lastSeen: number | null
+  /** epoch ms since which this browser has seen the printer in its current state */
+  statusSince: number | null
+}
+
+export function getMQTTPrinterMetaByIndex(printerIndex: number): PrinterMeta | null {
   const entry = cachedPrinterEntries[printerIndex]
   if (!entry) return null
-  return { online: entry.online, busy: entry.busy, lastError: entry.lastError }
+  return {
+    online: entry.online,
+    busy: entry.busy,
+    lastError: entry.lastError,
+    lastSeen: entry.lastSeen,
+    statusSince: statusSince[entry.printer.name]?.since ?? null,
+  }
 }
 
 export function getMQTTConnectionState(): { connected: boolean; lastError: string | null } {

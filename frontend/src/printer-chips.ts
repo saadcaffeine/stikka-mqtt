@@ -6,6 +6,7 @@
 import type { PrinterInfo } from './types'
 import { resolveLocation } from './locations'
 import * as api from './mqtt-api'
+import { printerBadge, printerStyle } from './printer-style'
 
 export interface PrinterChips {
   element: HTMLElement
@@ -50,7 +51,8 @@ export function createPrinterChips(): PrinterChips {
       const name = document.createElement('span')
       name.className = 'printer-chip-name'
       name.textContent = p.name
-      b.append(dot, name)
+      b.style.setProperty('--printer-color', printerStyle(p.name).color)
+      b.append(printerBadge(p.name, 18), dot, name)
       if (place) {
         const loc = document.createElement('span')
         loc.className = 'printer-chip-loc'

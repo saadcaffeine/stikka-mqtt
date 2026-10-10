@@ -179,3 +179,27 @@
   .info-dialog { padding: 1.2rem 1.1rem 1.3rem }
 }
 @media (hover: none) { .icon-opt, .font-tile, .printer-card, .printer-chip { min-height: 48px } }
+
+/* ── Per-printer identity ─────────────────────────────────────────────── */
+.printer-badge { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 50%; background: var(--printer-color, var(--accent)); color: #fff; box-shadow: 0 0 0 2px var(--bg-elements, #fff), 0 0 0 3px var(--printer-color, var(--accent)) }
+.printer-glyph { display: block }
+.printer-card { border-left: 5px solid var(--printer-color, var(--border-subtle)) }
+.printer-card-top { display: flex; align-items: center; gap: .5rem }
+.printer-card-time, .map-summary-time { display: block; font-size: .72rem; color: var(--dim); font-weight: 600; letter-spacing: 0; text-transform: none }
+.map-summary-time { flex-basis: 100%; margin-top: -.1rem }
+.printer-chip { border-left: 4px solid var(--printer-color, var(--border-subtle)) }
+.btn.has-printer-color { background: var(--printer-color); border-color: var(--printer-color); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: .55rem }
+.btn.has-printer-color:hover:not(:disabled) { filter: brightness(1.1) }
+.btn.has-printer-color strong { font-weight: 800 }
+.print-glyph { display: inline-flex; padding: .2rem; border-radius: 50%; background: rgba(255,255,255,.22) }
+
+/* ── Loading indicators ───────────────────────────────────────────────── */
+.spinner { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; vertical-align: -2px }
+.spinner-lg { width: 30px; height: 30px; border-width: 3px }
+.btn.is-busy { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; opacity: .85; cursor: progress }
+.preview-wrap { position: relative }
+.preview-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; background: color-mix(in srgb, var(--bg-page, #fff) 78%, transparent); color: var(--text); font-weight: 700; z-index: 2; backdrop-filter: blur(1px) }
+.preview-loading[hidden] { display: none }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s } }
+.btn.has-printer-color { min-width: 0; max-width: 100% }
+.btn.has-printer-color > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

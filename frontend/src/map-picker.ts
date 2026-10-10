@@ -13,6 +13,8 @@ import {
 } from './world-map-data'
 import { resolveLocation, type ResolvedPlace } from './locations'
 import type { PrinterInfo } from './types'
+import type { PrinterMeta } from './mqtt-api'
+import { printerBadge, printerStyle, timeAgo, duration } from './printer-style'
 import { icon } from './icons'
 
 const NS = 'http://www.w3.org/2000/svg'
@@ -20,7 +22,7 @@ const NS = 'http://www.w3.org/2000/svg'
 type Status = 'online' | 'busy' | 'offline' | 'unknown'
 
 export interface MapPickerOptions {
-  getMeta(printerIndex: number): { online: boolean; busy: boolean; lastError: string | null } | null
+  getMeta(printerIndex: number): PrinterMeta | null
   isDummy(name: string): boolean
   onSelect(printerIndex: number): void
 }
@@ -59,7 +61,7 @@ function h<K extends keyof HTMLElementTagNameMap>(
 
 const flagSrc = (cc: string): string => `${import.meta.env.BASE_URL}flags/${cc.toLowerCase()}.svg`
 
-interface Entry { p: PrinterInfo; i: number; status: Status }
+interface Entry { p: PrinterInfo; i: number; status: Status; meta: PrinterMeta | null }
 interface Group { key: string; place: ResolvedPlace | null; entries: Entry[]; x: number; y: number; status: Status }
 interface Cluster { groups: Group[]; x: number; y: number; count: number; status: Status }
 
@@ -298,6 +300,17 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
     return img
   }
 
+  /** "Seen 12 s ago · online for 3 min" — empty for the dummy/unknown printer. */
+  const timingText = (e: Entry): string => {
+    if (!e.meta || e.status === 'unknown') return ''
+    const seen = `seen ${timeAgo(e.meta.lastSeen)}`
+    if (!e.meta.statusSince) return seen
+    const label = e.status === 'offline' ? 'offline for' : e.status === 'busy' ? 'busy for' : 'online for'
+    return `${seen} · ${label} ${duration(e.meta.statusSince)}`
+  }
+
+  const timeEls: Array<[HTMLElement, Entry]> = []
+
   function renderSummary(): void {
     summary.replaceChildren()
     const sel = groups.flatMap(g => g.entries).find(e => e.i === selectedIndex)
@@ -309,15 +322,19 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
     summary.append(
       h('span', 'map-summary-kicker', 'Printing to'),
       flagImg(grp.place?.cc ?? ''),
+      printerBadge(sel.p.name, 24),
       h('strong', 'map-summary-name', sel.p.name),
       h('span', 'map-summary-loc', grp.place ? grp.place.label : (sel.p.location || 'location not set')),
       statusPill(sel.status),
     )
+    const timing = timingText(sel)
+    if (timing) summary.append(h('span', 'map-summary-time', timing))
   }
 
   function renderCards(): void {
     const keep = cardsEl.scrollTop
     cardsEl.replaceChildren()
+    timeEls.length = 0
     if (!groups.length) {
       cardsEl.append(h('p', 'map-empty',
         'No printers are online right now. Printers appear here a few seconds after they connect.'))
@@ -344,11 +361,15 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
         b.setAttribute('aria-pressed', String(e.i === selectedIndex))
         const sub = [e.p.type.toUpperCase(), labelShape(e.p), e.p.location && g.place && e.p.location !== g.place.label ? e.p.location : '']
           .filter(Boolean).join(' · ')
-        b.append(
-          h('span', 'printer-card-name', e.p.name),
-          h('span', 'printer-card-sub', sub),
-          statusPill(e.status),
-        )
+        b.style.setProperty('--printer-color', printerStyle(e.p.name).color)
+        const top = h('span', 'printer-card-top', printerBadge(e.p.name, 22), h('span', 'printer-card-name', e.p.name))
+        b.append(top, h('span', 'printer-card-sub', sub), statusPill(e.status))
+        const timing = timingText(e)
+        if (timing) {
+          const te = h('span', 'printer-card-time', timing)
+          timeEls.push([te, e])
+          b.append(te)
+        }
         b.addEventListener('click', () => { focusKey = g.key; opts.onSelect(e.i) })
         list.append(b)
       }
@@ -374,7 +395,7 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
         g = { key, place, entries: [], x, y, status: 'unknown' }
         byKey.set(key, g)
       }
-      g.entries.push({ p, i, status })
+      g.entries.push({ p, i, status, meta })
     })
     groups = [...byKey.values()]
     groups.forEach(g => { g.status = bestStatus(g.entries.map(e => e.status)) })
@@ -389,5 +410,11 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
   }
 
   new ResizeObserver(() => renderPins()).observe(svg)
+  // Keep the relative times ("seen 12 s ago") fresh without re-rendering cards.
+  window.setInterval(() => {
+    if (!root.isConnected) return
+    for (const [el, e] of timeEls) el.textContent = timingText(e)
+    renderSummary()
+  }, 10_000)
   return { element: root, update }
 }

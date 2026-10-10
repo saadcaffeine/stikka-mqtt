@@ -99,6 +99,10 @@ export interface SupabasePrinterEntry {
   online: boolean
   busy: boolean
   lastError: string | null
+  /** epoch ms of the printer's last heartbeat (server clock), or null */
+  lastSeen: number | null
+  /** true when the heartbeat is older than NODE_TIMEOUT_MS (shown as offline) */
+  stale: boolean
 }
 
 interface PrinterRow {
@@ -124,6 +128,7 @@ interface PrinterRow {
   online: boolean
   busy: boolean
   last_error: string | null
+  last_seen: string | null
 }
 
 // A node that loses power or Wi-Fi never gets to publish an "offline"
@@ -131,16 +136,23 @@ interface PrinterRow {
 // (unlike the old client-side timer), so it's consistent across every
 // browser and unaffected by any single browser reloading.
 const NODE_TIMEOUT_MS = 5 * 60 * 1000
+// Printers silent for longer than NODE_TIMEOUT_MS are still listed (as
+// offline, with their "last seen" time) for this long, then forgotten.
+const FORGET_AFTER_MS = 24 * 60 * 60 * 1000
 
 export async function fetchSupabasePrinters(): Promise<SupabasePrinterEntry[]> {
-  const cutoff = new Date(Date.now() - NODE_TIMEOUT_MS).toISOString()
+  const cutoff = new Date(Date.now() - FORGET_AFTER_MS).toISOString()
   const { data, error } = await requireClient()
     .from('printers')
-    .select('name, type, dpi, serial, location, label_width, label_length, label_is_round, label_vertical_offset, label_cut, zpl_compression_supported, ql_printhead_px, ql_invalidate_bytes, ql_auto_cut, ql_feed_margin_dots, ql_right_margin_dots, seiko_max_dots, seiko_density, seiko_speed, online, busy, last_error')
+    .select('name, type, dpi, serial, location, label_width, label_length, label_is_round, label_vertical_offset, label_cut, zpl_compression_supported, ql_printhead_px, ql_invalidate_bytes, ql_auto_cut, ql_feed_margin_dots, ql_right_margin_dots, seiko_max_dots, seiko_density, seiko_speed, online, busy, last_error, last_seen')
     .gt('last_seen', cutoff)
     .order('name')
   if (error) throw error
-  return ((data ?? []) as PrinterRow[]).map((row, index) => ({
+  const now = Date.now()
+  return ((data ?? []) as PrinterRow[]).map((row, index) => {
+    const lastSeen = row.last_seen ? Date.parse(row.last_seen) : null
+    const stale = lastSeen === null || now - lastSeen > NODE_TIMEOUT_MS
+    return {
     printer: {
       index,
       name: row.name,
@@ -165,10 +177,13 @@ export async function fetchSupabasePrinters(): Promise<SupabasePrinterEntry[]> {
       seikoDensity: row.seiko_density,
       seikoSpeed: row.seiko_speed,
     },
-    online: row.online,
-    busy: row.busy,
+    online: row.online && !stale,
+    busy: row.busy && !stale,
     lastError: row.last_error,
-  }))
+    lastSeen,
+    stale,
+    }
+  })
 }
 
 // Best-effort: called from mqtt-client.ts for every full status snapshot

@@ -11,6 +11,8 @@ import { saveCustomFont, saveTheme, applyTheme, type Theme } from './static-conf
 import * as api from './mqtt-api'
 import { marked } from 'marked'
 import { iconPicker, type IconOption } from './icon-picker'
+import { printerStyle, printerGlyphSvg, timeAgo, duration, pickDefaultPrinter } from './printer-style'
+import { resolveLocation } from './locations'
 import { createMapPicker } from './map-picker'
 import { createPrinterChips } from './printer-chips'
 import { buildFooter } from './footer'
@@ -191,15 +193,39 @@ function revokeSource(): void {
   }
 }
 
-async function loadRandomImage(kind: 'cat' | 'dog' | 'dino'): Promise<void> {
-  revokeSource()
+let previewLoadingEl: HTMLElement | null = null
+
+function setPreviewLoading(text: string | null): void {
+  if (!previewLoadingEl) return
+  previewLoadingEl.hidden = text === null
+  const label = previewLoadingEl.querySelector('.preview-loading-text')
+  if (label && text) label.textContent = text
+  previewLoadingEl.parentElement?.setAttribute('aria-busy', String(text !== null))
+}
+
+async function loadRandomImage(kind: 'cat' | 'dog' | 'dino', button?: HTMLButtonElement): Promise<void> {
+  const original = button?.innerHTML ?? ''
+  if (button) {
+    button.disabled = true
+    button.classList.add('is-busy')
+    button.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Fetching…</span>'
+  }
+  setPreviewLoading(`Fetching a ${kind}…`)
   try {
     const url = await api.fetchRandomImage(kind)
+    revokeSource()
     state.sourceImageURL = url
     state.imageSourceKind = kind
     schedulePreview()
   } catch (e) {
     alert('Failed to load image: ' + e)
+  } finally {
+    setPreviewLoading(null)
+    if (button) {
+      button.disabled = false
+      button.classList.remove('is-busy')
+      button.innerHTML = original
+    }
   }
 }
 
@@ -326,8 +352,8 @@ function buildWebcamDialog(onCapture: (dataURL: string) => void): { dialog: HTML
 function buildImageControls(webcam: { open: () => void }): HTMLElement {
   return section('Image Options',
     el('div', { class: 'btn-grid' },
-      btn('Get Cat', 'btn btn-small', () => loadRandomImage('cat')),
-      btn('Get Dog', 'btn btn-small', () => loadRandomImage('dog')),
+      (() => { const b = btn('Get Cat', 'btn btn-small', () => void loadRandomImage('cat', b)); return b })(),
+      (() => { const b = btn('Get Dog', 'btn btn-small', () => void loadRandomImage('dog', b)); return b })(),
       btn('Webcam', 'btn btn-small', () => webcam.open()),
       btn('Clear', 'btn btn-small btn-danger', () => {
         revokeSource()
@@ -1074,6 +1100,10 @@ export async function initApp(
 
   // ── Preview canvas ──
   previewCanvas = el('canvas', { class: 'preview-canvas' })
+  previewLoadingEl = el('div', { class: 'preview-loading', role: 'status' },
+    el('span', { class: 'spinner spinner-lg', 'aria-hidden': 'true' }),
+    el('span', { class: 'preview-loading-text' }, 'Loading…'))
+  previewLoadingEl.hidden = true
 
   // ── File upload zone ──
   const uploadInput = el('input', { type: 'file', accept: 'image/*,.pdf', class: 'hidden', id: 'upload-input' })
@@ -1114,8 +1144,11 @@ export async function initApp(
     onSelect: i => selectPrinter(i),
   })
 
+  let printBtnReady = false   // printBtn is created further down
+
   function renderPrinterOptions(): void {
     mapPicker.update(state.printers, state.selectedPrinterIndex)
+    if (printBtnReady) stylePrintButton()
     // Keep the URL shareable: #<printer-slug> preselects this printer on load.
     const sel = state.printers[state.selectedPrinterIndex]
     if (sel && !api.isDummyPrinter(sel.name) && !pendingPrinterSlug) {
@@ -1161,7 +1194,9 @@ export async function initApp(
     }
     const mode = meta.online ? (meta.busy ? 'busy' : 'online') : 'offline'
     const extra = meta.lastError ? ` · ${meta.lastError}` : ''
-    mqttStateEl.textContent = `MQTT printer state: ${mode}${extra}`
+    const seen = meta.lastSeen ? ` · last seen ${timeAgo(meta.lastSeen)}` : ''
+    const since = meta.statusSince ? ` · ${mode} for ${duration(meta.statusSince)}` : ''
+    mqttStateEl.textContent = `Printer is ${mode}${extra}${seen}${since}`
     mqttStateEl.className = 'status-msg ' + (meta.online ? 'status-ok' : 'status-err')
     mqttStateEl.classList.remove('hidden')
   }
@@ -1183,7 +1218,11 @@ export async function initApp(
         pendingPrinterSlug = null
       } else {
         const match = printers.findIndex(p => p.name === currentName)
-        state.selectedPrinterIndex = match >= 0 ? match : 0
+        state.selectedPrinterIndex = match >= 0 ? match : pickDefaultPrinter(
+          printers,
+          i => api.getMQTTPrinterMetaByIndex(i)?.online === true,
+          p => !api.isDummyPrinter(p.name) && resolveLocation(p.location, p.name)?.cc === 'SG',
+        )
       }
     }
 
@@ -1194,6 +1233,7 @@ export async function initApp(
 
   window.addEventListener('beforeunload', () => printerSubscription(), { once: true })
   updateMQTTStateHint()
+  window.setInterval(updateMQTTStateHint, 15_000)
 
   // ── Print / Download buttons ──
   const statusEl = el('div', { class: 'status-msg hidden' })
@@ -1241,7 +1281,24 @@ export async function initApp(
     }
   })
 
-  printBtn.innerHTML = icon('printer', 20) + '<span>Print Stikka</span>'
+  function stylePrintButton(): void {
+    const sel = state.printers[state.selectedPrinterIndex]
+    if (!sel || api.isDummyPrinter(sel.name)) {
+      printBtn.style.removeProperty('--printer-color')
+      printBtn.classList.remove('has-printer-color')
+      printBtn.innerHTML = icon('printer', 20) + '<span>Print Stikka</span>'
+      printBtn.title = ''
+      return
+    }
+    const st = printerStyle(sel.name)
+    printBtn.style.setProperty('--printer-color', st.color)
+    printBtn.classList.add('has-printer-color')
+    printBtn.innerHTML = `<span class="print-glyph">${printerGlyphSvg(st.glyphName, 20)}</span><span>Print on <strong>${sel.name.replace(/[<>&]/g, '')}</strong></span>`
+    printBtn.title = `Print on ${sel.name}`
+  }
+  stylePrintButton()
+  printBtnReady = true
+
   downloadBtn.innerHTML = icon('download', 20) + '<span>Download</span>'
 
   // ── Tab system ──
@@ -1311,7 +1368,7 @@ export async function initApp(
     el('div', { class: 'main-grid' },
       // Left: preview + upload
       el('div', { class: 'preview-col' },
-        el('div', { class: 'preview-wrap' }, previewCanvas),
+        el('div', { class: 'preview-wrap' }, previewCanvas, previewLoadingEl),
         uploadZone,
       ),
       // Right: control panels
