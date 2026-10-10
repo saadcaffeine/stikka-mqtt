@@ -38,7 +38,7 @@
           { "@type": "Question", "name": "Which ESP32 board do I need?",
             "acceptedAnswer": { "@type": "Answer", "text": "The ESP32-S3 DevKitC-1 in the N16R8 version (16 MB flash, 8 MB PSRAM). The extra memory is needed to handle label images." } },
           { "@type": "Question", "name": "How do I add my printer to the map?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Flash the bridge firmware from the ESP32 Flasher tab, join the board's setup network or open its web page, then set a printer name and a Location such as a city or country name. The printer appears on the map with its country flag within about a minute." } },
+            "acceptedAnswer": { "@type": "Answer", "text": "Flash the bridge firmware from the ESP32 Flasher tab, join the board's setup network or open its web page, then set a printer name and type your city or country into the \"Details (optional)\" box under it. The printer appears on the map with its country flag within about a minute." } },
           { "@type": "Question", "name": "Is Stikka free?",
             "acceptedAnswer": { "@type": "Answer", "text": "Yes. The software is open source and free to use, and no account is needed." } }
         ]
@@ -103,7 +103,7 @@
     <ol>
       <li>Flash the bridge firmware from the <em>ESP32 Flasher</em> tab of the app.</li>
       <li>Join the board's own <code>Stikka-XXXXXX</code> WiFi network (password <code>stikkaesp32</code>) and open <code>http://1.2.3.4</code>.</li>
-      <li>Enter your WiFi, choose the printer type, give the printer a name and set its <strong>Location</strong> — a city or country such as <em>Berlin</em> or <em>Singapore</em>, or exact coordinates like <code>My Space @1.35,103.82</code>.</li>
+      <li>Enter your WiFi, choose the printer type, give the printer a name and fill in the <strong>Details (optional)</strong> box under it with your location — a city or country such as <em>Berlin</em> or <em>Singapore</em>, or exact coordinates like <code>My Space @1.35,103.82</code>.</li>
       <li>Within about a minute it shows up on the map with its country flag.</li>
     </ol>
 
@@ -117,7 +117,7 @@
     <h3>Which ESP32 board do I need?</h3>
     <p>The ESP32-S3 DevKitC-1 in the N16R8 version. The extra memory is needed to handle label images.</p>
     <h3>How do I add my printer to the map?</h3>
-    <p>Flash the firmware, open the board's setup page and set a printer name and a Location. See the steps above.</p>
+    <p>Flash the firmware, open the board's setup page and set a printer name and fill in the Details box with your city. See the steps above.</p>
     <h3>Is Stikka free?</h3>
     <p>Yes. The software is open source and free to use, and no account is needed.</p>
   </main>

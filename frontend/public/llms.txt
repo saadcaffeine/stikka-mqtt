@@ -2,7 +2,7 @@
 
 > Stikka SG is the Singapore instance of Stikka, a free, open-source web app for designing and printing stickers and labels on Zebra (ZPL), Brother QL and Seiko label printers anywhere in the world. It is hosted by Edible Makerspace, an open-source DIY bio-hacker makerspace in Singapore.
 
-Labels are designed and rendered entirely in the browser. Each printer is an ESP32 board wired to a label printer; the browser sends the finished label to it over MQTT, so there is no print server in between. Printers announce themselves and appear as flag pins on a world map, placed using the "Location" set in each printer's setup page.
+Labels are designed and rendered entirely in the browser. Each printer is an ESP32 board wired to a label printer; the browser sends the finished label to it over MQTT, so there is no print server in between. Printers announce themselves and appear as flag pins on a world map, placed using the "Details (optional)" field (the location) in each printer's setup page.
 
 ## Pages
 - [Stikka SG web app](https://stikka.ediblemakerspace.com/): design a label, pick a printer on the map, print
