@@ -8,7 +8,6 @@
  * or send it to the Go server for printing.
  */
 
-import * as bwipjs from 'bwip-js/browser'
 import type { AppState, PrinterInfo, FontInfo, TextElement } from './types'
 
 // ── Font loading ─────────────────────────────────────────────────────────────
@@ -440,10 +439,11 @@ async function drawTextOverlay(
 
 // ── Step 5: Barcode overlay ──────────────────────────────────────────────────
 
-export function generateBarcodeCanvas(
+export async function generateBarcodeCanvas(
   data: string,
   type: 'QR' | 'Code128' | 'Aztec' | 'DataMatrix',
-): HTMLCanvasElement {
+): Promise<HTMLCanvasElement> {
+  const bwipjs = await import('bwip-js/browser')
   const typeMap: Record<string, string> = {
     QR: 'qrcode',
     Code128: 'code128',

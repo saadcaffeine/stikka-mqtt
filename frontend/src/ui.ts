@@ -7,7 +7,6 @@
 import type { AppState, FontInfo, PrinterInfo, PrintStats, TextElement } from './types'
 import { makeTextElement } from './types'
 import { renderLabel, generateBarcodeCanvas, loadAllFonts, loadFont } from './editor'
-import { renderPDFPageAsDataURL } from './pdf'
 import { saveCustomFont, saveTheme, applyTheme, type Theme } from './static-config'
 import * as api from './mqtt-api'
 import { marked } from 'marked'
@@ -208,6 +207,7 @@ async function handleFileUpload(file: File): Promise<void> {
   revokeSource()
   try {
     if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const { renderPDFPageAsDataURL } = await import('./pdf')
       state.sourceImageURL = await renderPDFPageAsDataURL(file)
     } else {
       state.sourceImageURL = URL.createObjectURL(file)
@@ -548,11 +548,11 @@ function buildBarcodeControls(): HTMLElement {
   ;(dataInput as HTMLInputElement).value = state.barcodeData
   dataInput.addEventListener('input', () => { state.barcodeData = (dataInput as HTMLInputElement).value })
 
-  const generateBtn = btn('Generate Barcode', 'btn btn-primary', () => {
+  const generateBtn = btn('Generate Barcode', 'btn btn-primary', async () => {
     const data = state.barcodeData.trim()
     if (!data) { alert('Enter barcode data first.'); return }
     try {
-      state.barcodeCanvas = generateBarcodeCanvas(data, state.barcodeType)
+      state.barcodeCanvas = await generateBarcodeCanvas(data, state.barcodeType)
       schedulePreview()
     } catch (e) {
       alert('Barcode error: ' + e)
@@ -865,10 +865,21 @@ interface FirmwareEnvEntry {
   firmwareURL: string
 }
 
+let flasherLoaded = false
+function loadFlasherElement(): void {
+  if (flasherLoaded) return
+  flasherLoaded = true
+  const sc = document.createElement('script')
+  sc.type = 'module'
+  sc.src = 'https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module'
+  document.head.append(sc)
+}
+
 function buildESP32FlasherTab(): HTMLElement {
   const root = el('div', { class: 'tab-content esp32-flasher-tab' })
   const statusEl = el('div', { class: 'status-msg hidden' })
   const directFlashWrap = el('div', { class: 'esp32-direct-flash-wrap hidden' })
+  loadFlasherElement()
   const installEl = document.createElement('esp-web-install-button') as HTMLElement
   const installButton = btn('Flash Stikka Firmware', 'btn btn-primary btn-large', () => {})
   installButton.setAttribute('slot', 'activate')

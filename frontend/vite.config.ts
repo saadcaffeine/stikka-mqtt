@@ -20,5 +20,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/mqtt') || id.includes('node_modules/readable-stream') || id.includes('node_modules/ws')) return 'mqtt'
+          if (id.includes('@supabase')) return 'supabase'
+          if (id.includes('bwip-js')) return 'barcode'
+        },
+      },
+    },
   },
 })
