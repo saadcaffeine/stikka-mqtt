@@ -171,10 +171,23 @@ const BARCODE_OPTS: IconOption<'QR' | 'Code128' | 'Aztec' | 'DataMatrix'>[] = [
   { value: 'DataMatrix', label: 'Data Matrix', icon: 'datamatrix', title: 'Data Matrix' },
 ]
 
+// On phones every control section can be folded away; all but the first start
+// folded so the page isn't one endless scroll. Desktop shows everything.
+let sectionCount = 0
 function section(title: string, ...children: HTMLElement[]): HTMLDetailsElement {
-  const details = el('details')
-  details.setAttribute('open', '')
-  details.append(el('summary', { class: 'section-title' }, title), ...children)
+  return buildSection(title, false, children)
+}
+function controlSection(title: string, ...children: HTMLElement[]): HTMLDetailsElement {
+  return buildSection(title, true, children)
+}
+function buildSection(title: string, foldOnPhones: boolean, children: HTMLElement[]): HTMLDetailsElement {
+  const details = el('details', { class: 'ctl-section' })
+  const small = window.matchMedia('(max-width: 700px)').matches
+  if (!(foldOnPhones && small && sectionCount > 0)) details.setAttribute('open', '')
+  if (foldOnPhones) sectionCount++
+  const summary = el('summary', { class: 'section-title' }, el('span', {}, title))
+  summary.append(el('span', { class: 'section-chevron', 'aria-hidden': 'true' }))
+  details.append(summary, ...children)
   return details
 }
 
@@ -350,7 +363,7 @@ function buildWebcamDialog(onCapture: (dataURL: string) => void): { dialog: HTML
 // ── Build Image Controls panel ───────────────────────────────────────────────
 
 function buildImageControls(webcam: { open: () => void }): HTMLElement {
-  return section('Image Options',
+  return controlSection('Image Options',
     el('div', { class: 'btn-grid' },
       (() => { const b = btn('Get Cat', 'btn btn-small', () => void loadRandomImage('cat', b)); return b })(),
       (() => { const b = btn('Get Dog', 'btn btn-small', () => void loadRandomImage('dog', b)); return b })(),
@@ -564,7 +577,7 @@ function buildTextOverlaySection(): HTMLElement {
     renderList()
   })
 
-  return section('Text Overlay', listEl, addBtn)
+  return controlSection('Text Overlay', listEl, addBtn)
 }
 
 // ── Build Barcode Controls panel ─────────────────────────────────────────────
@@ -592,7 +605,7 @@ function buildBarcodeControls(): HTMLElement {
     schedulePreview()
   })
 
-  return section('Barcode',
+  return controlSection('Barcode',
     dataInput,
     iconPicker('Type', BARCODE_OPTS, state.barcodeType, v => { state.barcodeType = v }),
     slider('Size', 1, 10, 1, state.barcodeSize, v => { state.barcodeSize = v }),
@@ -1293,13 +1306,16 @@ export async function initApp(
     const st = printerStyle(sel.name)
     printBtn.style.setProperty('--printer-color', st.color)
     printBtn.classList.add('has-printer-color')
-    printBtn.innerHTML = `<span class="print-glyph">${printerGlyphSvg(st.glyphName, 20)}</span><span>Print on <strong>${sel.name.replace(/[<>&]/g, '')}</strong></span>`
+    printBtn.innerHTML = `<span class="print-glyph">${printerGlyphSvg(st.glyphName, 20)}</span><span><span class="print-prefix">Print on </span><strong>${sel.name.replace(/[<>&]/g, '')}</strong></span>`
     printBtn.title = `Print on ${sel.name}`
+    printBtn.setAttribute('aria-label', `Print on ${sel.name}`)
   }
   stylePrintButton()
   printBtnReady = true
 
   downloadBtn.innerHTML = icon('download', 20) + '<span>Download</span>'
+  downloadBtn.setAttribute('aria-label', 'Download label as PNG')
+  downloadBtn.title = 'Download label as PNG'
 
   // ── Tab system ──
   const allTabs: Array<{ name: string; panel: HTMLElement }> = [

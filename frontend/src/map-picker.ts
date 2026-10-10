@@ -121,7 +121,29 @@ export function createMapPicker(opts: MapPickerOptions): MapPicker {
 
   mapWrap.append(svg, zoomBar, legend)
   const cardsEl = h('div', 'map-cards')
-  root.append(summary, h('div', 'map-body', mapWrap, cardsEl))
+  // Collapse toggle: hides the map + cards so the editor gets the space.
+  const COLLAPSE_KEY = 'stikka.picker.collapsed'
+  const toggle = h('button', 'map-toggle') as HTMLButtonElement
+  toggle.type = 'button'
+  const bar = h('div', 'map-summary-bar', summary, toggle)
+  const body = h('div', 'map-body', mapWrap, cardsEl)
+  root.append(bar, body)
+  let collapsed = false
+  try { collapsed = localStorage.getItem(COLLAPSE_KEY) === '1' } catch { /* ignore */ }
+  const applyCollapsed = (): void => {
+    root.classList.toggle('collapsed', collapsed)
+    body.hidden = collapsed
+    toggle.setAttribute('aria-expanded', String(!collapsed))
+    toggle.innerHTML = `<span class="map-toggle-label">${collapsed ? 'Change printer' : 'Hide'}</span>${icon(collapsed ? 'plus' : 'minus', 16)}`
+    toggle.title = collapsed ? 'Show the printer map' : 'Collapse the printer map'
+  }
+  toggle.addEventListener('click', () => {
+    collapsed = !collapsed
+    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0') } catch { /* ignore */ }
+    applyCollapsed()
+    if (!collapsed) requestAnimationFrame(() => renderPins())
+  })
+  applyCollapsed()
 
   // ── viewBox (zoom / pan) ──────────────────────────────────────────────────
   const ASPECT = MAP_H / MAP_W

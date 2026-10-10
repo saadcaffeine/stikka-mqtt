@@ -203,3 +203,57 @@
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s } }
 .btn.has-printer-color { min-width: 0; max-width: 100% }
 .btn.has-printer-color > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+/* ── Collapsible sections + picker ────────────────────────────────────── */
+.section-title { display: flex; align-items: center; gap: .5rem }
+.section-chevron { margin-left: auto }
+.section-chevron { width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .15s; flex: 0 0 auto; margin-right: .2rem }
+details:not([open]) > .section-title .section-chevron { transform: rotate(-45deg) }
+details:not([open]) > .section-title { border-bottom: 0 }
+.map-summary-bar { display: flex; align-items: center; gap: .5rem; border-bottom: var(--border-width-thin) var(--border-style) var(--border-subtle) }
+.map-picker.collapsed .map-summary-bar { border-bottom: 0 }
+.map-summary-bar .map-summary { flex: 1; min-width: 0; border-bottom: 0 }
+.map-toggle { display: inline-flex; align-items: center; gap: .35rem; margin-right: .7rem; padding: .35rem .7rem; font: inherit; font-size: .78rem; font-weight: 700; color: var(--text); background: var(--bg-elements); border: var(--border-width-thin) var(--border-style) var(--border-subtle); border-radius: 999px; cursor: pointer; white-space: nowrap; text-transform: none; letter-spacing: 0 }
+.map-toggle:hover { background: var(--bg-hover); border-color: var(--border) }
+.map-body[hidden] { display: none }
+
+/* Map + printer list stay side by side at every width. */
+@media (max-width: 900px) {
+  .map-body { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) !important }
+  .map-cards { height: 0 !important; max-height: none !important; min-height: 100% !important; border-left: var(--border-width-thin) var(--border-style) var(--border-subtle) !important; border-top: 0 !important }
+  .map-card-list { grid-template-columns: 1fr !important }
+}
+@media (max-width: 700px) {
+  .map-body { min-height: 15rem; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) !important }
+  .map-wrap { display: flex; align-items: center }
+  .map-wrap .map-svg { flex: 1 }
+  .map-legend { display: none }
+  .map-zoom { flex-direction: column }
+  .map-cards { padding: .5rem .5rem .6rem; gap: .6rem }
+  .map-group-head { gap: .35rem; font-size: .8rem }
+  .map-group-count { display: none }
+  .printer-card { padding: .45rem .5rem }
+  .printer-card-sub { display: none }
+  .printer-card-name { font-size: .85rem; overflow-wrap: anywhere }
+  .printer-card-time { font-size: .66rem }
+  .map-summary-name { font-size: .95rem }
+  .map-toggle-label { display: none }
+  .map-toggle { padding: .4rem; margin-right: .5rem }
+  .map-summary { gap: .35rem .5rem }
+  .map-summary-kicker { display: none }
+}
+
+/* Phones: Print gets most of the width so the printer name stays readable. */
+@media (max-width: 700px) {
+  .action-bar .btn-secondary { flex: 0 0 auto; padding-left: .9rem; padding-right: .9rem }
+  .action-bar .btn-primary { flex: 1 1 auto }
+}
+@media (max-width: 520px) {
+  .action-bar .btn-secondary span { display: none }
+  .action-bar .btn-secondary { min-width: 52px }
+}
+@media (max-width: 520px) { .print-prefix { display: none } }
+@media (max-width: 700px) {
+  .map-wrap { overflow: hidden }
+  .map-wrap .map-svg { overflow: visible }
+}

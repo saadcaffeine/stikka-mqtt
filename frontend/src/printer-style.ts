@@ -20,6 +20,7 @@ const COLORS = [
   '#5B6B16', // olive
   '#3F51B5', // indigo
   '#6D4C41', // brown
+  '#455A64', // slate
 ]
 
 const S = 'fill="currentColor"'
@@ -57,9 +58,16 @@ export function printerGlyphSvg(glyphName: string, size = 18): string {
 export function printerStyle(name: string): PrinterStyle {
   let st = cache.get(name)
   if (!st) {
-    const h = fnv1a(name.toLowerCase())
-    const glyphName = GLYPH_NAMES[(h >>> 8) % GLYPH_NAMES.length]
-    st = { color: COLORS[h % COLORS.length], glyphName, glyph: glyphName }
+    const h = fnv1a(name.trim().toLowerCase())
+    // Independent hashes for colour and glyph (murmur3-style finaliser), so
+    // two names that share a colour rarely share a symbol too.
+    const mix = (x: number): number => {
+      x ^= x >>> 16; x = Math.imul(x, 0x85ebca6b) >>> 0
+      x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35) >>> 0
+      return (x ^ (x >>> 16)) >>> 0
+    }
+    const glyphName = GLYPH_NAMES[mix(h ^ 0x9e3779b9) % GLYPH_NAMES.length]
+    st = { color: COLORS[mix(h) % COLORS.length], glyph: glyphName, glyphName }
     cache.set(name, st)
   }
   return st
