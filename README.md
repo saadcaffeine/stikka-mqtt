@@ -1,62 +1,95 @@
-## Overview 
+# SG Stikka Factory
 
-Webservice to remotely print on label printers spread all over the galaxy with the power of IoT and AI (buzzwords for investors)
+Singapore instance of the open-source **Stikka** sticker/label machine, run at the [Edible Makerspace](https://linktr.ee/ediblemakerspace). Fork of [stikka-factory/stikka-mqtt](https://github.com/stikka-factory/stikka-mqtt).
 
+Design a label in your browser, pick a printer anywhere on the map, press print. The browser renders the label, sends it over MQTT, and a small ESP32 bridge plugged into the printer's USB port prints it.
 
-## How to print stuff
+- Live site: **https://stikka.ediblemakerspace.com**
+- Bridge firmware (fork): [saadcaffeine/stikka-esp32](https://github.com/saadcaffeine/stikka-esp32)
+- Upstream project: [stikka-factory/stikka-mqtt](https://github.com/stikka-factory/stikka-mqtt)
 
-COMMING SOON
+## How it works
 
-## Architecture
+```
+Browser  ──►  MQTT broker (HiveMQ)  ──►  ESP32-S3 bridge  ──USB──►  Printer
+  │              /<printer>/command/        /<printer>/status/ (retained)
+  └── Supabase: shared printer list, fonts, print statistics
+```
 
-* One central Webapp for printing with a db for settings, seen printers and fonts.
-* Each printer has an ESP32 connected to it.
-* Communication between the printers and Webapp is done over MQTT.
-   1. Each printer publishes its status on `/pintername/status/` with the settings done in the ESP32 Firmware.
-   2. When a printer is announced and online it's shown in the dropdown.
-   3. Printjobs are sent to `/pintername/command/` which the printer is subscribed to.
+1. Each printer has an ESP32-S3 bridge. It publishes its status on `/<printer>/status/` and listens for jobs on `/<printer>/command/`.
+2. Printers that are online appear in the picker. A printer drops off the list after 5 minutes without a status message.
+3. All image work (text, dithering, barcodes, Brother QL rasterising) happens in the browser. The firmware only forwards bytes.
 
 ### Supported boards
 
-- ESP32-S3 DevKitC-1 N16R8 ([AliExpress example](https://www.aliexpress.com/item/1005012092039320.html)) be sure to get the N16R8 version (Enough RAM for images needed)
+- ESP32-S3 DevKitC-1 **N16R8** ([example listing](https://www.aliexpress.com/item/1005012092039320.html)). Get the N16R8 variant: images need the PSRAM.
 
 ### Supported printers
 
-| Printer | Method | Description |
+| Printer | Method | Notes |
 |---|---|---|
-| Zebra / ZPL | Network | Printer connected to the same network as the ESP32 (not recommended) |
-| Zebra / ZPL | USB | Printer connected to the USB-B port of the printer |
-| Brother QL | USB | Printer connected to the USB-B port of the printer |
-| Seiko SPL | USB | Printer connected to the USB-B port of the printer |
+| Zebra / ZPL | Network | Printer on the same network as the ESP32 (not recommended) |
+| Zebra / ZPL | USB | Printer's USB-B port plugged into the ESP32 |
+| Brother QL | USB | Printer's USB-B port plugged into the ESP32. QL-500/550 need legacy mode, see below |
+| Seiko SLP | USB | Printer's USB-B port plugged into the ESP32 |
 
+## What this fork changes
 
-### ESP32 Firmware
+### Frontend
+- **Singapore defaults and branding:** Singapore is the default location, with an Edible Makerspace theme, footer and SEO tags.
+- **Printer picker:** map picker, icon pickers, colour-coded printer chips, "last seen" times, a boot spinner, and a picker that stays greyed out until statuses have loaded.
+- **Layout:** collapsible sections, side-by-side picker and preview, a print button that fits mobile screens, heavy libraries lazy-loaded.
+- **Brother QL-500/550 support:** an opt-in legacy command set (below).
 
-Bridge firmware source: [github.com/stikka-factory/stikka-esp32](https://github.com/stikka-factory/stikka-esp32) — WebUI-configurable firmware for the ESP32-S3 N16R8 module that connects it to Stikka-MQTT.
+### Brother QL-500 / QL-550 (legacy raster mode)
 
+Older QL models reject the newer command set that this project normally sends: auto-cut, "switch to raster mode", mode setting, expanded mode and compression. They respond by **blinking the green LED quickly and printing nothing**, even though the job arrives and the USB transfer succeeds.
 
-## Printer setup
+Legacy mode builds the reduced stream the QL-500 accepts (print-information header, margins, uncompressed raster rows, print command). It is opt-in per printer and stored in your browser, because the shared printer list does not carry a printer model. In the browser console on the site:
 
-### Add a new printer
+```js
+// printer names are comma-separated and case-insensitive
+localStorage.setItem('stikka.qlLegacyPrinters', 'SG-stikka-factory')
+```
 
-1. On the ESP32 board there are 2 open solder jumper, they need to be bridged.
-2. Connect to USB port mamed **COM** for flashing.
-3. Flash the ESP using the ESP32 Flasher tab on [stikka-factory.github.io/stikka-mqtt](https://stikka-factory.github.io/stikka-mqtt/).
-4. If the ESP32 isn't connected to a known network, it makes its own named `Stikka-XXXXXX`.
-5. Connect to it using password `stikkaesp32`.
-6. The WebUI is on IP `1.2.3.4`. It should lead you through the setup process.
-   - MQTT settings for [stikka-factory.github.io/stikka-mqtt](https://stikka-factory.github.io/stikka-mqtt/) are already set up.
-   - After setting the WLAN or changing the printer typ the ESP32 restarts.
-7. Don't forget to give it a name, the default name is ignored.
-8. The ESP32 webUI should be reachable under `<name>.local` (slugified: **Test_Brother** becomes `test-brother.local`)
+Optional: override the media header sent to the printer (width x length in mm, length 0 = continuous roll). This changes only what the printer is told about the loaded media, not the label size you design:
 
-### Updating the printer
+```js
+localStorage.setItem('stikka.qlMedia', 'SG-stikka-factory=62x0')
+```
 
-Updating can be done using the Firmware tab on the ESP32 WebUI (download firmware.bin from the ESP32 Flasher tab) or using the ESP32 Flasher.
+Verified on: Brother QL-500, DK-22205 (62 mm continuous), ESP32-S3 over USB. Set the bridge's label size to match the roll (62 x 0 for DK-22205), and keep Auto-cut off: the QL-500 has no cutter.
 
-### Removing a printer
+Both keys are per browser. Clear them with `localStorage.removeItem(...)`.
 
-There's no manual "forget" step either — a printer drops off the list on its own once it stops publishing status for 5 minutes straight (powered off, disconnected, etc).
+## Add a printer
 
+1. Bridge the two open solder jumpers on the ESP32 board.
+2. Plug into the USB port labelled **COM** to flash.
+3. Flash from the ESP32 Flasher tab on the site (or any Chromium-based browser with Web Serial).
+4. If the ESP32 doesn't know a network it creates one named `Stikka-XXXXXX`. Join it with password `stikkaesp32` and open the setup page (usually `http://192.168.4.1`).
+5. Follow the setup: Wi-Fi, MQTT (the shared broker is pre-filled) and printer type. The board reboots after saving.
+6. Give the printer a unique name. The default is ignored.
+7. Afterwards the bridge's web UI is at `http://<name>.local/` (slugified: `Test_Brother` becomes `test-brother.local`).
 
+Updating: use the Firmware page on the bridge's own web UI, or re-flash from the Flasher tab. Removing: just unplug it; it disappears after 5 minutes.
 
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| Printer's green LED blinks quickly, nothing prints (QL-500/550) | Needs legacy mode (see above) |
+| Job accepted but label is blank or the wrong size | Bridge label size doesn't match the loaded roll |
+| Bridge log shows `0x10c` after a failed job | The USB transfer got stuck. Reboot the bridge (unplug USB power) |
+| Bridge Config "Save" did nothing | Firmware older than the fork's fix: update the firmware |
+| Printer missing from the picker | No status for 5 minutes: check bridge power, Wi-Fi and the status pills on its web UI |
+
+## Development and deployment
+
+The frontend is a Vite + TypeScript app in `frontend/`, deployed to GitHub Pages by `.github/workflows/deploy-pages.yml`. Configuration (`config.json`) is generated at deploy time from repository variables and secrets. See [README_DETAILS.md](README_DETAILS.md) for architecture, frontend configuration and the Supabase schema.
+
+Note: the Pages build checks out the firmware from `stikka-factory/stikka-esp32` to produce the web flasher binaries. To flash this fork's firmware from the site, change the `repository:` value of that checkout step to `saadcaffeine/stikka-esp32`.
+
+## Credits
+
+Based on [Stikka](https://github.com/stikka-factory/stikka-mqtt) by the stikka-factory contributors. Fork maintained by [Saad Chinoy](https://github.com/saadcaffeine) for the Singapore instance.
