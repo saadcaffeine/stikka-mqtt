@@ -211,7 +211,7 @@ export interface AppState {
   // Barcode
   barcodeData: string
   barcodeType: 'QR' | 'Code128' | 'Aztec' | 'DataMatrix'
-  barcodeSize: number
+  barcodeSize: number   // 10-100, % of the label
   barcodeOffsetX: number
   barcodeOffsetY: number
   barcodeRotate: number
@@ -252,7 +252,7 @@ export function defaultState(): AppState {
 
     barcodeData: '',
     barcodeType: 'QR',
-    barcodeSize: 3,
+    barcodeSize: 50,   // % of the printable area (see drawBarcodeOverlay)
     barcodeOffsetX: 0,
     barcodeOffsetY: 0,
     barcodeRotate: 0,

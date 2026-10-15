@@ -97,13 +97,14 @@ function slider(
   label: string,
   min: number, max: number, step: number, value: number,
   onChange: (v: number) => void,
+  format: (v: number) => string = String,
 ): HTMLElement {
   const id = 'slider-' + Math.random().toString(36).slice(2)
-  const valDisplay = el('span', { class: 'slider-value' }, String(value))
+  const valDisplay = el('span', { class: 'slider-value' }, format(value))
   const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(value), id })
   input.addEventListener('input', () => {
     const v = parseFloat(input.value)
-    valDisplay.textContent = String(v)
+    valDisplay.textContent = format(v)
     onChange(v)
   })
   const row = el('div', { class: 'slider-row' },
@@ -127,6 +128,23 @@ function toggle(label: string, value: boolean, onChange: (v: boolean) => void): 
   if (value) input.setAttribute('checked', '')
   input.addEventListener('change', () => onChange((input as HTMLInputElement).checked))
   return el('label', { class: 'toggle', for: id }, input, el('span', { class: 'toggle-text' }, label))
+}
+
+// On/off switch: a real checkbox (role="switch") styled as a sliding pill.
+function switchToggle(label: string, value: boolean, onChange: (v: boolean) => void): HTMLElement {
+  const id = 'switch-' + Math.random().toString(36).slice(2)
+  const input = el('input', { type: 'checkbox', id, role: 'switch', class: 'switch-input' }) as HTMLInputElement
+  input.checked = value
+  input.setAttribute('aria-checked', String(value))
+  input.addEventListener('change', () => {
+    input.setAttribute('aria-checked', String(input.checked))
+    onChange(input.checked)
+  })
+  return el('label', { class: 'switch', for: id },
+    input,
+    el('span', { class: 'switch-track', 'aria-hidden': 'true' }),
+    el('span', { class: 'switch-text' }, label),
+  )
 }
 
 function select<T extends string>(
@@ -583,50 +601,87 @@ function buildTextOverlaySection(): HTMLElement {
 // ── Build Barcode Controls panel ─────────────────────────────────────────────
 
 function buildBarcodeControls(): HTMLElement {
-  const dataInput = el('input', { type: 'text', class: 'text-input', placeholder: 'Barcode data…' })
-  ;(dataInput as HTMLInputElement).value = state.barcodeData
-  dataInput.addEventListener('input', () => { state.barcodeData = (dataInput as HTMLInputElement).value })
+  const dataInput = el('input', { type: 'text', class: 'text-input', placeholder: 'Barcode data…' }) as HTMLInputElement
+  dataInput.value = state.barcodeData
 
-  const generateBtn = btn('Generate Barcode', 'btn btn-primary', async () => {
+  async function generate(): Promise<void> {
     const data = state.barcodeData.trim()
-    if (!data) { alert('Enter barcode data first.'); return }
+    if (!data) return
     try {
       state.barcodeCanvas = await generateBarcodeCanvas(data, state.barcodeType)
+      syncControls()
       schedulePreview()
     } catch (e) {
       alert('Barcode error: ' + e)
     }
-  })
+  }
 
-  const clearBtn = btn('Clear Barcode', 'btn btn-outline', () => { state.barcodeCanvas = null; schedulePreview() })
-
-  const fontPicker = buildFontPicker(state.fontName, name => {
-    state.fontName = name
+  const generateBtn = btn('Generate Barcode', 'btn btn-primary', () => { void generate() })
+  const clearBtn = btn('Clear Barcode', 'btn btn-outline', () => {
+    state.barcodeCanvas = null
+    syncControls()
     schedulePreview()
   })
 
+  // Only shown when the text line under/over the barcode is switched on.
+  const fontBlock = el('div', { class: 'field-block' },
+    el('span', { class: 'icon-field-label' }, 'Text font'),
+    buildFontPicker(state.fontName, name => { state.fontName = name; schedulePreview() }),
+  )
+
+  // Position controls do nothing until a barcode exists.
+  const xOff = slider('X-Offset', -500, 500, 1, state.barcodeOffsetX, v => { state.barcodeOffsetX = v; schedulePreview() })
+  const yOff = slider('Y-Offset', -500, 500, 1, state.barcodeOffsetY, v => { state.barcodeOffsetY = v; schedulePreview() })
+  const positionBlock = el('div', { class: 'barcode-position' },
+    iconPicker('Horizontal', H_ALIGN_OPTS, state.barcodeHAlign, v => {
+      state.barcodeHAlign = v; state.barcodeOffsetX = 0
+      resetSlider(xOff, 0); schedulePreview()
+    }),
+    iconPicker('Vertical', V_ALIGN_OPTS, state.barcodeVAlign, v => {
+      state.barcodeVAlign = v; state.barcodeOffsetY = 0
+      resetSlider(yOff, 0); schedulePreview()
+    }),
+    xOff,
+    yOff,
+    iconPicker('Rotate', ROTATE_OPTS, String(state.barcodeRotate) as '0', v => { state.barcodeRotate = parseInt(v); schedulePreview() }),
+  )
+
+  function syncControls(): void {
+    const hasData = state.barcodeData.trim().length > 0
+    generateBtn.disabled = !hasData
+    generateBtn.title = hasData ? '' : 'Enter barcode data first'
+    clearBtn.disabled = !state.barcodeCanvas
+    fontBlock.hidden = !state.barcodeLabel
+    positionBlock.hidden = !state.barcodeCanvas
+  }
+
+  dataInput.addEventListener('input', () => {
+    state.barcodeData = dataInput.value
+    syncControls()
+    // Keep the caption in step with the data once a barcode is shown.
+    if (state.barcodeCanvas && state.barcodeLabel) schedulePreview()
+  })
+  dataInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !generateBtn.disabled) { e.preventDefault(); void generate() }
+  })
+  syncControls()
+
   return controlSection('Barcode',
     dataInput,
-    iconPicker('Type', BARCODE_OPTS, state.barcodeType, v => { state.barcodeType = v }),
-    slider('Size', 1, 10, 1, state.barcodeSize, v => { state.barcodeSize = v }),
-    el('div', { class: 'field-block' }, el('span', { class: 'icon-field-label' }, 'Label font'), fontPicker),
+    iconPicker('Type', BARCODE_OPTS, state.barcodeType, v => {
+      state.barcodeType = v
+      if (state.barcodeCanvas) void generate()   // redraw the existing barcode in the new type
+    }),
+    slider('Size', 10, 100, 5, state.barcodeSize, v => { state.barcodeSize = v; schedulePreview() }, v => `${v}%`),
     el('div', { class: 'toggle-row' },
-      toggle('Barcode Label', state.barcodeLabel, v => { state.barcodeLabel = v; schedulePreview() }),
+      switchToggle('Show data as text', state.barcodeLabel, v => {
+        state.barcodeLabel = v
+        syncControls()
+        schedulePreview()
+      }),
     ),
-    ...(() => {
-      const xOff = slider('X-Offset', -500, 500, 1, state.barcodeOffsetX, v => { state.barcodeOffsetX = v; schedulePreview() })
-      const yOff = slider('Y-Offset', -500, 500, 1, state.barcodeOffsetY, v => { state.barcodeOffsetY = v; schedulePreview() })
-      const hAlign = iconPicker('Horizontal', H_ALIGN_OPTS, state.barcodeHAlign, v => {
-        state.barcodeHAlign = v; state.barcodeOffsetX = 0
-        resetSlider(xOff, 0); schedulePreview()
-      })
-      const vAlign = iconPicker('Vertical', V_ALIGN_OPTS, state.barcodeVAlign, v => {
-        state.barcodeVAlign = v; state.barcodeOffsetY = 0
-        resetSlider(yOff, 0); schedulePreview()
-      })
-      return [hAlign, vAlign, xOff, yOff] as HTMLElement[]
-    })(),
-    iconPicker('Rotate', ROTATE_OPTS, String(state.barcodeRotate) as '0', v => { state.barcodeRotate = parseInt(v); schedulePreview() }),
+    fontBlock,
+    positionBlock,
     el('div', { class: 'btn-row' }, generateBtn, clearBtn),
   )
 }

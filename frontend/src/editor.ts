@@ -451,10 +451,12 @@ export async function generateBarcodeCanvas(
     DataMatrix: 'datamatrix',
   }
   const canvas = document.createElement('canvas')
+  // One pixel per module: drawBarcodeOverlay() scales it up by a whole
+  // number to fit the chosen size, which keeps every bar crisp.
   bwipjs.toCanvas(canvas, {
     bcid: typeMap[type] || 'qrcode',
     text: data,
-    scale: 3,
+    scale: 1,
   })
   return canvas
 }
@@ -467,103 +469,116 @@ async function drawBarcodeOverlay(
     barcodeRotate, barcodeHAlign, barcodeVAlign, barcodeLabel, barcodeData, fontName } = state
   if (!barcodeCanvas) return
 
-  const size = Math.max(1, barcodeSize)
-  let sw = barcodeCanvas.width * size
-  let sh = barcodeCanvas.height * size
+  // Size is a share of the label (10-100%): the barcode, its optional text
+  // line and quiet zone are fitted into that share of the printable area.
+  // Modules are scaled by a whole number of pixels so bars stay sharp for
+  // scanners, which is why the size moves in steps for small codes.
+  const angle = (barcodeRotate % 360 + 360) % 360
+  const quarterTurn = angle === 90 || angle === 270
+  const inset = 10
+  const pct = Math.min(100, Math.max(5, barcodeSize)) / 100
+  const boxW = Math.max(1, (ctx.canvas.width - inset * 2) * pct)
+  const boxH = Math.max(1, (ctx.canvas.height - inset * 2) * pct)
+  // Fit box in the barcode's own (unrotated) orientation.
+  const fitW = quarterTurn ? boxH : boxW
+  const fitH = quarterTurn ? boxW : boxH
+  const bw = barcodeCanvas.width
+  const bh = barcodeCanvas.height
 
-  // Scale
-  let scaled: OffscreenCanvas | HTMLCanvasElement = new OffscreenCanvas(sw, sh)
-  const sc = (scaled as OffscreenCanvas).getContext('2d') as OffscreenCanvasRenderingContext2D
-  sc.imageSmoothingEnabled = false
-  sc.drawImage(barcodeCanvas, 0, 0, sw, sh)
-
-  // Label: a single line of barcode-data text above the barcode, sized to
-  // fit the label's pixel width, then folded into `scaled` as one unit so
-  // the rest of this function (rotate/pad/align) treats it as the barcode.
-  if (barcodeLabel && barcodeData.trim()) {
-    const fontFamily = fontName ? `"${fontName}"` : 'sans-serif'
+  // Optional text line above the barcode: at most ~a fifth of the barcode's
+  // smaller side so it reads as a caption, and never wider than the fit box
+  // (long data like URLs gets a smaller font rather than shrinking the code).
+  const text = barcodeLabel ? barcodeData.trim() : ''
+  const fontFamily = fontName ? `"${fontName}"` : 'sans-serif'
+  if (text) {
     const loadPromise = fontLoadPromises.get(fontName)
     if (loadPromise) await loadPromise
-    const margin = 10
-    const maxWidth = Math.max(20, ctx.canvas.width - margin * 2)
-
-    const measure = document.createElement('canvas').getContext('2d')!
-    const text = barcodeData.trim()
-    const fontSize = fitSingleLineFontSize(measure, text, fontFamily, maxWidth)
-    const fontSpec = `${fontSize}px ${fontFamily}`
-    await document.fonts.load(fontSpec).catch(() => {})
-    measure.font = fontSpec
-    const metrics = measure.measureText(text)
-    const textW = Math.max(1, metrics.width)
-    const ascent = metrics.actualBoundingBoxAscent ?? fontSize
-    const descent = metrics.actualBoundingBoxDescent ?? fontSize * 0.2
-    const textH = ascent + descent
-    const pad = 4
-
-    const labelCanvas = document.createElement('canvas')
-    labelCanvas.width = textW + pad * 2
-    labelCanvas.height = textH + pad * 2
-    const lc = labelCanvas.getContext('2d')!
-    lc.font = fontSpec
-    lc.fillStyle = '#000000'
-    lc.fillText(text, pad, pad + ascent)
-
-    const gap = 8
-    const compW = Math.max(scaled.width, labelCanvas.width)
-    const compH = labelCanvas.height + gap + scaled.height
-    const composite = new OffscreenCanvas(compW, compH)
-    const cc = composite.getContext('2d')!
-    cc.fillStyle = '#ffffff'
-    cc.fillRect(0, 0, compW, compH)
-    cc.drawImage(labelCanvas, (compW - labelCanvas.width) / 2, 0)
-    cc.drawImage(scaled, (compW - scaled.width) / 2, labelCanvas.height + gap)
-
-    scaled = composite
-    sw = compW
-    sh = compH
+    await document.fonts.load(`20px ${fontFamily}`).catch(() => {})
   }
+  const measure = document.createElement('canvas').getContext('2d')!
+  const textPad = 4
+  const gap = 8
+  const captionFor = (w: number, h: number, quiet: number) => {
+    if (!text) return null
+    const maxFont = Math.max(10, Math.round(Math.min(w, h) * 0.22))
+    // Width budget = the fit box minus the quiet zone and padding around it.
+    const maxWidth = Math.max(w, fitW - quiet * 2 - textPad * 2)
+    // Round down: rounding up can overshoot the budget by a pixel and push
+    // the whole block back down a size step.
+    const fontSize = Math.floor(fitSingleLineFontSize(measure, text, fontFamily, maxWidth, 5, maxFont))
+    const spec = `${fontSize}px ${fontFamily}`
+    measure.font = spec
+    const m = measure.measureText(text)
+    const ascent = m.actualBoundingBoxAscent || fontSize
+    const descent = m.actualBoundingBoxDescent || fontSize * 0.2
+    return {
+      spec, ascent,
+      w: Math.min(Math.ceil(Math.max(1, m.width) + textPad * 2), Math.max(w, Math.floor(maxWidth) + textPad * 2)),
+      h: Math.ceil(ascent + descent + textPad * 2),
+    }
+  }
+  const layout = (k: number) => {
+    const w = bw * k
+    const h = bh * k
+    const quiet = Math.max(4, k * 4)
+    const caption = captionFor(w, h, quiet)
+    const innerW = Math.max(w, caption ? caption.w : 0)
+    const innerH = h + (caption ? caption.h + gap : 0)
+    return { k, w, h, quiet, caption, innerW, innerH, totalW: innerW + quiet * 2, totalH: innerH + quiet * 2 }
+  }
+  let L = layout(Math.max(1, Math.floor(Math.min(fitW / bw, fitH / bh))))
+  while (L.k > 1 && (L.totalW > fitW || L.totalH > fitH)) L = layout(L.k - 1)
+  // Very long data on a small label won't fit even at 1px per module:
+  // shrink it to fit rather than letting it run off the label.
+  const shrink = Math.min(1, fitW / L.totalW, fitH / L.totalH)
 
-  // Rotate
-  const angle = (barcodeRotate % 360 + 360) % 360
-  let rotated: OffscreenCanvas | HTMLCanvasElement = scaled
+  const comp = document.createElement('canvas')
+  comp.width = L.totalW
+  comp.height = L.totalH
+  const cc = comp.getContext('2d')!
+  cc.fillStyle = '#ffffff'
+  cc.fillRect(0, 0, comp.width, comp.height)
+  cc.imageSmoothingEnabled = false
+  let y = L.quiet
+  if (L.caption) {
+    cc.font = L.caption.spec
+    cc.fillStyle = '#000000'
+    cc.fillText(text, Math.round(L.quiet + (L.innerW - L.caption.w) / 2 + textPad), Math.round(y + textPad + L.caption.ascent))
+    y += L.caption.h + gap
+  }
+  cc.drawImage(barcodeCanvas, Math.round(L.quiet + (L.innerW - L.w) / 2), y, L.w, L.h)
+
+  // Rotate (quarter turns only, so no resampling)
+  let out: HTMLCanvasElement = comp
   if (angle !== 0) {
-    const rad = (angle * Math.PI) / 180
-    const cos = Math.abs(Math.cos(rad))
-    const sin = Math.abs(Math.sin(rad))
-    const rw = Math.round(sw * cos + sh * sin)
-    const rh = Math.round(sw * sin + sh * cos)
-    const rc = new OffscreenCanvas(rw, rh)
-    const rx = rc.getContext('2d') as OffscreenCanvasRenderingContext2D
-    rx.fillStyle = '#ffffff'
-    rx.fillRect(0, 0, rw, rh)
-    rx.translate(rw / 2, rh / 2)
-    rx.rotate(rad)
-    rx.drawImage(scaled, -sw / 2, -sh / 2)
-    rotated = rc
+    const rc = document.createElement('canvas')
+    rc.width = quarterTurn ? comp.height : comp.width
+    rc.height = quarterTurn ? comp.width : comp.height
+    const rx = rc.getContext('2d')!
+    rx.imageSmoothingEnabled = false
+    rx.translate(rc.width / 2, rc.height / 2)
+    rx.rotate((angle * Math.PI) / 180)
+    rx.drawImage(comp, -comp.width / 2, -comp.height / 2)
+    out = rc
   }
 
-  // Padding
-  const padding = Math.max(4, size * 4)
-  const padded = new OffscreenCanvas(rotated.width + padding * 2, rotated.height + padding * 2)
-  const pc = padded.getContext('2d') as OffscreenCanvasRenderingContext2D
-  pc.fillStyle = '#ffffff'
-  pc.fillRect(0, 0, padded.width, padded.height)
-  pc.drawImage(rotated as unknown as HTMLCanvasElement, padding, padding)
-
-  const pw = padded.width
-  const ph = padded.height
+  const pw = Math.round(out.width * shrink)
+  const ph = Math.round(out.height * shrink)
 
   let baseX: number
-  if (barcodeHAlign === 'Left') baseX = 10
-  else if (barcodeHAlign === 'Right') baseX = ctx.canvas.width - pw - 10
+  if (barcodeHAlign === 'Left') baseX = inset
+  else if (barcodeHAlign === 'Right') baseX = ctx.canvas.width - pw - inset
   else baseX = (ctx.canvas.width - pw) / 2
 
   let baseY: number
-  if (barcodeVAlign === 'Top') baseY = 10
-  else if (barcodeVAlign === 'Bottom') baseY = ctx.canvas.height - ph - 10
+  if (barcodeVAlign === 'Top') baseY = inset
+  else if (barcodeVAlign === 'Bottom') baseY = ctx.canvas.height - ph - inset
   else baseY = (ctx.canvas.height - ph) / 2
 
-  ctx.drawImage(padded as unknown as HTMLCanvasElement, baseX + barcodeOffsetX, baseY + barcodeOffsetY)
+  const prevSmoothing = ctx.imageSmoothingEnabled
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(out, Math.round(baseX + barcodeOffsetX), Math.round(baseY + barcodeOffsetY), pw, ph)
+  ctx.imageSmoothingEnabled = prevSmoothing
 }
 
 // ── Step 6: Circular mask ────────────────────────────────────────────────────

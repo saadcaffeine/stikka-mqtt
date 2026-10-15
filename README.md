@@ -41,6 +41,7 @@ Browser  ──►  MQTT broker (HiveMQ)  ──►  ESP32-S3 bridge  ──USB�
 - **Layout:** collapsible sections, side-by-side picker and preview, a print button that fits mobile screens, heavy libraries lazy-loaded.
 - **Brother QL-500/550 support:** an opt-in legacy command set (below).
 - **Printer-aware UI:** the Raw ZPL and Cable Label tabs only appear when the selected printer speaks ZPL (Zebra), and follow the printer picked on the map. The Print button shows when the selected printer is offline (disabled) or busy (the job prints next).
+- **Barcode controls:** size is a percentage of the label (always fits, bars stay sharp), "Show data as text" is a switch with its font picker shown only when it's on, position controls appear once a barcode exists, and Generate is disabled until there's data (Enter also generates).
 - **Fixed:** cable labels printed blank when the deploy config didn't set its own template; the built-in default now carries the `$input1$`/`$input2$` placeholders, and the tab warns if a configured template has none.
 
 ### Brother QL-500 / QL-550 (legacy raster mode)

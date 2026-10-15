@@ -273,3 +273,14 @@ details:not([open]) > .section-title { border-bottom: 0 }
 .tab-btn[hidden] { display: none }
 /* Print button while the selected printer is offline */
 .btn.is-offline { filter: grayscale(.8); cursor: not-allowed }
+
+/* On/off switch (switchToggle in ui.ts) */
+.switch { display: inline-flex; align-items: center; gap: .6rem; cursor: pointer; min-height: 44px; font-weight: 600; user-select: none }
+.switch-input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0 }
+.switch-track { position: relative; flex: 0 0 auto; box-sizing: border-box; width: 44px; height: 24px; border-radius: 999px; border: 2px solid var(--border, #191919); background: var(--border-subtle, #d6d6d6); transition: background .15s }
+.switch-track::after { content: ''; position: absolute; top: 0; left: 0; box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border, #191919); background: var(--bg-elements, #fff); transition: transform .15s }
+.switch-input:checked + .switch-track { background: var(--highlight, var(--accent)) }
+.switch-input:checked + .switch-track::after { transform: translateX(20px) }
+.switch-input:focus-visible + .switch-track { outline: 3px solid var(--highlight, var(--accent)); outline-offset: 2px }
+@media (prefers-reduced-motion: reduce) { .switch-track, .switch-track::after { transition: none } }
+.field-block[hidden], .barcode-position[hidden] { display: none }
