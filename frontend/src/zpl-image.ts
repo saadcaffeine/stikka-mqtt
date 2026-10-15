@@ -219,6 +219,11 @@ export interface QLRasterOptions {
   // commands. Sending them can leave the printer blinking green without
   // printing, so legacyRaster leaves all three out.
   legacyRaster?: boolean
+  // What the loaded media actually is, when that differs from the label
+  // being printed (e.g. a 55x55mm design on a continuous 62mm roll). Only
+  // the ESC i z media header uses it; the raster itself is still sized from
+  // labelWidthMm/labelLengthMm. lengthMm 0 = continuous.
+  media?: { widthMm: number; lengthMm: number }
 }
 
 function buildQLHeader(opts: QLRasterOptions, printheadPx: number, targetHeightPx: number): number[] {
@@ -250,10 +255,12 @@ function buildQLHeader(opts: QLRasterOptions, printheadPx: number, targetHeightP
   // Media & quality (ESC i z). mtype 0x0A = continuous/endless tape, 0x0B =
   // die-cut label. valid_flags sets all three media fields plus high print
   // quality (bits 1/2/3/6).
-  const continuous = opts.labelLengthMm <= 0
+  const mediaWidthMm = opts.media ? opts.media.widthMm : opts.labelWidthMm
+  const mediaLengthMm = opts.media ? opts.media.lengthMm : opts.labelLengthMm
+  const continuous = mediaLengthMm <= 0
   const mtype = continuous ? 0x0a : 0x0b
-  const mwidth = Math.round(opts.labelWidthMm) & 0xff
-  const mlength = continuous ? 0x00 : Math.round(opts.labelLengthMm) & 0xff
+  const mwidth = Math.round(mediaWidthMm) & 0xff
+  const mlength = continuous ? 0x00 : Math.round(mediaLengthMm) & 0xff
   const rnumber = targetHeightPx >>> 0
   out.push(
     0x1b, 0x69, 0x7a, // ESC i z

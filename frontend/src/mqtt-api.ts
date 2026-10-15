@@ -280,6 +280,26 @@ function isLegacyQLPrinter(name: string): boolean {
   }
 }
 
+// Optional per-printer media override for QL printers, e.g. a 55x55mm label
+// on a continuous 62mm roll (DK-22205) when the board still reports 55x55.
+// Only changes the media header sent to the printer, not the label size.
+//   localStorage.setItem('stikka.qlMedia', 'SG-stikka-factory=62x0')
+// Entries are comma-separated name=WIDTHxLENGTH (mm, length 0 = continuous).
+function qlMediaOverride(name: string): { widthMm: number; lengthMm: number } | undefined {
+  try {
+    const raw = localStorage.getItem('stikka.qlMedia') ?? ''
+    for (const entry of raw.split(',')) {
+      const m = entry.trim().match(/^(.+)=(\d+)x(\d+)$/)
+      if (m && m[1].trim().toLowerCase() === name.toLowerCase()) {
+        return { widthMm: Number(m[2]), lengthMm: Number(m[3]) }
+      }
+    }
+  } catch {
+    // localStorage unavailable -- no override
+  }
+  return undefined
+}
+
 export async function printImage(printerIndex: number, imageDataURL: string): Promise<void> {
   const printer = pickPrinter(printerIndex)
   const printerName = printer.name
@@ -295,6 +315,7 @@ export async function printImage(printerIndex: number, imageDataURL: string): Pr
       labelWidthMm: printer.label.width,
       labelLengthMm: printer.label.length,
       legacyRaster: isLegacyQLPrinter(printerName),
+      media: qlMediaOverride(printerName),
     })
     console.log(`[print] ql: sending raster, ${base64.length} base64 bytes`)
     await publishQLRasterCommand(printerName, base64)
