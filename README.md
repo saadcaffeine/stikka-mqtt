@@ -80,7 +80,8 @@ Updating: use the Firmware page on the bridge's own web UI, or re-flash from the
 |---|---|
 | Printer's green LED blinks quickly, nothing prints (QL-500/550) | Needs legacy mode (see above) |
 | Job accepted but label is blank or the wrong size | Bridge label size doesn't match the loaded roll |
-| Bridge log shows `0x10c` after a failed job | The USB transfer got stuck. Reboot the bridge (unplug USB power) |
+| Job fails with "printer stopped accepting data" | Printer out of labels, cover open or wrong roll. Fix it and print again; the next job is not blocked |
+| Bridge log shows `0x10c` after a failed job | Older firmware: reboot the bridge. Current fork firmware recovers by itself |
 | Bridge Config "Save" did nothing | Firmware older than the fork's fix: update the firmware |
 | Printer missing from the picker | No status for 5 minutes: check bridge power, Wi-Fi and the status pills on its web UI |
 
