@@ -631,16 +631,36 @@ function buildBarcodeControls(): HTMLElement {
   )
 }
 
+// ── Printer relevance helpers ────────────────────────────────────────────────
+
+// ZPL is Zebra's printer language. Only these printers can use the Raw ZPL and
+// Cable Label tabs; Brother QL / Seiko printers get pre-rasterised images.
+function isZplPrinter(p: PrinterInfo | undefined): boolean {
+  if (!p) return false
+  const t = p.type.toLowerCase()
+  return t === 'zpl' || t === 'zebra'
+}
+
+function selectedPrinter(): PrinterInfo | undefined {
+  return state.printers[state.selectedPrinterIndex]
+}
+
+// Called whenever the Label tab's selected printer (or the printer list)
+// changes, so tabs and controls that depend on it can follow along.
+const printerSelectionListeners: Array<() => void> = []
+function onPrinterSelectionChange(fn: () => void): void {
+  printerSelectionListeners.push(fn)
+}
+
 // ── Build Raw ZPL tab ────────────────────────────────────────────────────────
 
 function buildZPLTab(): HTMLElement {
-  const isZplCompatible = (type: string): boolean => {
-    const t = type.toLowerCase()
-    return t === 'zpl' || t === 'zebra'
-  }
 
-  let zplPrinters = state.printers.filter(p => isZplCompatible(p.type))
-  let selectedZPLIndex = zplPrinters.length > 0 ? zplPrinters[0].index : -1
+  let zplPrinters = state.printers.filter(p => isZplPrinter(p))
+  // Start on the printer picked on the Label tab when it speaks ZPL.
+  let selectedZPLIndex = isZplPrinter(selectedPrinter())
+    ? selectedPrinter()!.index
+    : (zplPrinters[0]?.index ?? -1)
 
   // Printer chooser (ZPL-only): always-visible flag chips instead of a dropdown
   const chips = createPrinterChips()
@@ -656,13 +676,22 @@ function buildZPLTab(): HTMLElement {
 
   const unsubscribe = api.subscribeMQTTPrinters((printers) => {
     const selectedName = zplPrinters.find(p => p.index === selectedZPLIndex)?.name ?? ''
-    zplPrinters = printers.filter(p => isZplCompatible(p.type))
+    zplPrinters = printers.filter(p => isZplPrinter(p))
     const next = zplPrinters.find(p => p.name === selectedName)
     selectedZPLIndex = next ? next.index : (zplPrinters[0]?.index ?? -1)
     renderZPLPrinterOptions()
     scheduleZPLPreview()
   })
   window.addEventListener('beforeunload', () => unsubscribe(), { once: true })
+  // Follow the printer picked on the Label tab.
+  onPrinterSelectionChange(() => {
+    const main = selectedPrinter()
+    if (isZplPrinter(main) && main!.index !== selectedZPLIndex) {
+      selectedZPLIndex = main!.index
+      renderZPLPrinterOptions()
+      scheduleZPLPreview()
+    }
+  })
 
   const statusEl = el('div', { class: 'status-msg hidden' })
   let zplStatusTimer: number | null = null
@@ -754,13 +783,12 @@ function buildZPLTab(): HTMLElement {
 // ── Build Cable Label tab ────────────────────────────────────────────────────
 
 function buildCableLabelTab(): HTMLElement {
-  const isZplCompatible = (type: string): boolean => {
-    const t = type.toLowerCase()
-    return t === 'zpl' || t === 'zebra'
-  }
 
-  let zplPrinters = state.printers.filter(p => isZplCompatible(p.type))
-  let selectedZPLIndex = zplPrinters.length > 0 ? zplPrinters[0].index : -1
+  let zplPrinters = state.printers.filter(p => isZplPrinter(p))
+  // Start on the printer picked on the Label tab when it speaks ZPL.
+  let selectedZPLIndex = isZplPrinter(selectedPrinter())
+    ? selectedPrinter()!.index
+    : (zplPrinters[0]?.index ?? -1)
 
   // Printer chooser (ZPL-only): always-visible flag chips instead of a dropdown
   const chips = createPrinterChips()
@@ -775,12 +803,20 @@ function buildCableLabelTab(): HTMLElement {
 
   const unsubscribe = api.subscribeMQTTPrinters((printers) => {
     const selectedName = zplPrinters.find(p => p.index === selectedZPLIndex)?.name ?? ''
-    zplPrinters = printers.filter(p => isZplCompatible(p.type))
+    zplPrinters = printers.filter(p => isZplPrinter(p))
     const next = zplPrinters.find(p => p.name === selectedName)
     selectedZPLIndex = next ? next.index : (zplPrinters[0]?.index ?? -1)
     renderCablePrinterOptions()
   })
   window.addEventListener('beforeunload', () => unsubscribe(), { once: true })
+  // Follow the printer picked on the Label tab.
+  onPrinterSelectionChange(() => {
+    const main = selectedPrinter()
+    if (isZplPrinter(main) && main!.index !== selectedZPLIndex) {
+      selectedZPLIndex = main!.index
+      renderCablePrinterOptions()
+    }
+  })
 
   const statusEl = el('div', { class: 'status-msg hidden' })
   let zplStatusTimer: number | null = null
@@ -826,6 +862,12 @@ function buildCableLabelTab(): HTMLElement {
   // Text inputs
   const textInput1 = el('input', { type: 'text', class: 'text-input', placeholder: 'Line 1 (max 15 chars)…', maxlength: '15' })
   const textInput2 = el('input', { type: 'text', class: 'text-input', placeholder: 'Line 2 (max 15 chars)…', maxlength: '15' })
+
+  // A template without placeholders prints the same fixed label whatever is
+  // typed -- say so instead of silently printing blanks.
+  const templateWarning = el('div', { class: 'status-msg status-err' },
+    "This site's cable label template has no $input1$ / $input2$ placeholders, so the text you type won't appear on the label. Fix APP_CABLE_LABEL_ZPL_TEMPLATE in the repository variables.")
+  if (/\$input[12]\$/.test(state.cableLabelZPLTemplate)) templateWarning.classList.add('hidden')
 
   // Generate ZPL function
   function generateZPL(): string {
@@ -886,6 +928,7 @@ function buildCableLabelTab(): HTMLElement {
       previewBtn,
       sendBtn,
     ),
+    templateWarning,
     statusEl,
     textInput1,
     textInput2,
@@ -1165,6 +1208,7 @@ export async function initApp(
   function renderPrinterOptions(): void {
     mapPicker.update(pickerLoading ? [] : state.printers, pickerLoading ? -1 : state.selectedPrinterIndex)
     if (printBtnReady) stylePrintButton()
+    printerSelectionListeners.forEach(fn => fn())
     // Keep the URL shareable: #<printer-slug> preselects this printer on load.
     const sel = state.printers[state.selectedPrinterIndex]
     if (sel && !api.isDummyPrinter(sel.name) && !pendingPrinterSlug) {
@@ -1284,7 +1328,10 @@ export async function initApp(
 
   window.addEventListener('beforeunload', () => printerSubscription(), { once: true })
   updateMQTTStateHint()
-  window.setInterval(updateMQTTStateHint, 15_000)
+  window.setInterval(() => {
+    updateMQTTStateHint()
+    if (printBtnReady) stylePrintButton()
+  }, 15_000)
 
   // ── Print / Download buttons ──
   const statusEl = el('div', { class: 'status-msg hidden' })
@@ -1336,19 +1383,31 @@ export async function initApp(
     const sel = state.printers[state.selectedPrinterIndex]
     if (pickerLoading || !sel || api.isDummyPrinter(sel.name)) {
       printBtn.style.removeProperty('--printer-color')
-      printBtn.classList.remove('has-printer-color')
-      printBtn.innerHTML = icon('printer', 20) + `<span>${pickerLoading ? 'Finding printers…' : 'Print Stikka'}</span>`
+      printBtn.classList.remove('has-printer-color', 'is-offline')
+      const text = pickerLoading ? 'Finding printers…' : !sel ? 'Pick a printer on the map' : 'Print Stikka'
+      printBtn.innerHTML = icon('printer', 20) + `<span>${text}</span>`
       printBtn.title = ''
-      printBtn.disabled = pickerLoading
+      printBtn.disabled = pickerLoading || !sel
       return
     }
-    printBtn.disabled = false
+    // Reflect the selected printer's live state: an offline printer can't
+    // take the job (it would be lost), a busy one prints it next.
+    const meta = api.getMQTTPrinterMetaByIndex(state.selectedPrinterIndex)
+    const offline = meta ? !meta.online : false
+    const busy = !offline && !!meta?.busy
+    const name = sel.name.replace(/[<>&]/g, '')
+    printBtn.disabled = offline
+    printBtn.classList.toggle('is-offline', offline)
     const st = printerStyle(sel.name)
     printBtn.style.setProperty('--printer-color', st.color)
     printBtn.classList.add('has-printer-color')
-    printBtn.innerHTML = `<span class="print-glyph">${printerGlyphSvg(st.glyphName, 20)}</span><span><span class="print-prefix">Print on </span><strong>${sel.name.replace(/[<>&]/g, '')}</strong></span>`
-    printBtn.title = `Print on ${sel.name}`
-    printBtn.setAttribute('aria-label', `Print on ${sel.name}`)
+    const prefix = offline ? 'Offline: ' : busy ? 'Busy, queue on ' : 'Print on '
+    printBtn.innerHTML = `<span class="print-glyph">${printerGlyphSvg(st.glyphName, 20)}</span><span><span class="print-prefix">${prefix}</span><strong>${name}</strong></span>`
+    const title = offline
+      ? `${sel.name} is offline. Pick another printer on the map.`
+      : busy ? `${sel.name} is printing; your label prints after the current job.` : `Print on ${sel.name}`
+    printBtn.title = title
+    printBtn.setAttribute('aria-label', title)
   }
   stylePrintButton()
   printBtnReady = true
@@ -1358,10 +1417,11 @@ export async function initApp(
   downloadBtn.title = 'Download label as PNG'
 
   // ── Tab system ──
-  const allTabs: Array<{ name: string; panel: HTMLElement }> = [
+  // needsZpl: only shown while the selected printer speaks ZPL.
+  const allTabs: Array<{ name: string; panel: HTMLElement; needsZpl?: boolean }> = [
     { name: 'Label',   panel: el('div', { class: 'tab-panel active', id: 'tab-label' }) },
-    ...(zplRawEnabled ? [{ name: 'Raw ZPL', panel: el('div', { class: 'tab-panel', id: 'tab-zpl' }) }] : []),
-    ...(cableLabelEnabled ? [{ name: 'Cable Label', panel: el('div', { class: 'tab-panel', id: 'tab-cable' }) }] : []),
+    ...(zplRawEnabled ? [{ name: 'Raw ZPL', panel: el('div', { class: 'tab-panel', id: 'tab-zpl' }), needsZpl: true }] : []),
+    ...(cableLabelEnabled ? [{ name: 'Cable Label', panel: el('div', { class: 'tab-panel', id: 'tab-cable' }), needsZpl: true }] : []),
     { name: 'About', panel: el('div', { class: 'tab-panel', id: 'tab-about' }) },
     { name: 'ESP32 Flasher', panel: el('div', { class: 'tab-panel', id: 'tab-esp32-flasher' }) },
     { name: 'Fonts', panel: el('div', { class: 'tab-panel', id: 'tab-fonts' }) },
@@ -1391,6 +1451,19 @@ export async function initApp(
     })
     tabBtns.push(b)
   })
+
+  // Hide tabs that don't apply to the selected printer (e.g. Raw ZPL on a
+  // Brother QL), and fall back to the Label tab if the open one disappears.
+  function updateTabVisibility(): void {
+    const zpl = !pickerLoading && isZplPrinter(selectedPrinter())
+    allTabs.forEach((t, i) => {
+      if (!t.needsZpl) return
+      tabBtns[i].hidden = !zpl
+      if (!zpl && tabBtns[i].classList.contains('active')) tabBtns[0].click()
+    })
+  }
+  onPrinterSelectionChange(updateTabVisibility)
+  updateTabVisibility()
 
   // ── Theme control ──
   const themeAttr = document.documentElement.dataset.theme

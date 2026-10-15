@@ -268,3 +268,8 @@ details:not([open]) > .section-title { border-bottom: 0 }
 .map-toggle:disabled { opacity: .5; cursor: default }
 #app.is-loading::after { display: none }
 .map-picker.is-loading .map-cards > *, .map-picker.is-loading .map-summary > * { visibility: hidden }
+
+/* Tabs that don't apply to the selected printer (see updateTabVisibility) */
+.tab-btn[hidden] { display: none }
+/* Print button while the selected printer is offline */
+.btn.is-offline { filter: grayscale(.8); cursor: not-allowed }

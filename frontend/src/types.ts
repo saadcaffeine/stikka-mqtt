@@ -262,6 +262,6 @@ export function defaultState(): AppState {
     barcodeCanvas: null,
 
     rawZPL: '^XA\n^CFA,30\n^FO50,20\n^FDHello ZPL^FS\n^XZ',
-    cableLabelZPLTemplate: '^XA\\n^FO40,400^A0B,50,40^FD$input1$^FS\\n^FO120,400^A0R,50,40^FD$input2$^FS\\n^XZ',
+    cableLabelZPLTemplate: '^XA\n^FO40,400^A0B,50,40^FD$input1$^FS\n^FO120,400^A0R,50,40^FD$input2$^FS\n^XZ',
   }
 }
