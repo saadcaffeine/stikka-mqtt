@@ -213,12 +213,20 @@ export interface QLRasterOptions {
   rightMarginDots: number  // 0 = auto-center; >0 = distance from the head's right edge
   labelWidthMm: number
   labelLengthMm: number    // 0 = continuous/endless
+  // QL-500/550-class printers (brother_ql models.py: mode_setting=False,
+  // expanded_mode=False, and for the QL-500 cutting=False) don't implement
+  // ESC i a (raster mode switch), ESC i K (expanded mode) or the cutter
+  // commands. Sending them can leave the printer blinking green without
+  // printing, so legacyRaster leaves all three out.
+  legacyRaster?: boolean
 }
 
 function buildQLHeader(opts: QLRasterOptions, printheadPx: number, targetHeightPx: number): number[] {
   const out: number[] = []
+  const legacy = opts.legacyRaster === true
+  const autoCut = opts.autoCut && !legacy
   const switchRaster = [0x1b, 0x69, 0x61, 0x01] // ESC i a 1
-  out.push(...switchRaster)
+  if (!legacy) out.push(...switchRaster)
 
   let remaining = Math.max(0, opts.invalidateBytes)
   while (remaining > 0) {
@@ -228,7 +236,7 @@ function buildQLHeader(opts: QLRasterOptions, printheadPx: number, targetHeightP
   }
 
   out.push(0x1b, 0x40) // ESC @ (init)
-  out.push(...switchRaster)
+  if (!legacy) out.push(...switchRaster)
 
   // Status information request (ESC i S). The reference implementation
   // (pklaus/brother_ql conversion.py) sends this unconditionally before
@@ -261,14 +269,14 @@ function buildQLHeader(opts: QLRasterOptions, printheadPx: number, targetHeightP
     0x00,
   )
 
-  if (opts.autoCut) {
+  if (autoCut) {
     out.push(0x1b, 0x69, 0x4d, 0x40) // ESC i M, autocut on (bit 6)
     out.push(0x1b, 0x69, 0x41, 0x01) // ESC i A, cut every 1 label
   }
 
   // Expanded mode (ESC i K): cut_at_end mirrors autocut; 600dpi and
   // two-color printing aren't implemented, so both bits stay off.
-  out.push(0x1b, 0x69, 0x4b, opts.autoCut ? (1 << 3) : 0x00)
+  if (!legacy) out.push(0x1b, 0x69, 0x4b, autoCut ? (1 << 3) : 0x00)
 
   const feed = Math.max(0, opts.feedMarginDots) & 0xffff
   out.push(0x1b, 0x69, 0x64, feed & 0xff, (feed >>> 8) & 0xff) // ESC i d

@@ -265,6 +265,21 @@ export async function publishFont(name: string, file: File): Promise<FontInfo> {
   return font
 }
 
+// Opt-in list of QL printers (by name) that are QL-500/550-class and need the
+// reduced command set -- see QLRasterOptions.legacyRaster. Kept in this
+// browser's localStorage because the shared Supabase schema and the ESP32
+// status message don't carry a model. Set it once in the dev console:
+//   localStorage.setItem('stikka.qlLegacyPrinters', 'SG-stikka-factory')
+// (comma-separated names, case-insensitive).
+function isLegacyQLPrinter(name: string): boolean {
+  try {
+    const raw = localStorage.getItem('stikka.qlLegacyPrinters') ?? ''
+    return raw.split(',').map(n => n.trim().toLowerCase()).filter(Boolean).includes(name.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
 export async function printImage(printerIndex: number, imageDataURL: string): Promise<void> {
   const printer = pickPrinter(printerIndex)
   const printerName = printer.name
@@ -279,6 +294,7 @@ export async function printImage(printerIndex: number, imageDataURL: string): Pr
       rightMarginDots: printer.qlRightMarginDots,
       labelWidthMm: printer.label.width,
       labelLengthMm: printer.label.length,
+      legacyRaster: isLegacyQLPrinter(printerName),
     })
     console.log(`[print] ql: sending raster, ${base64.length} base64 bytes`)
     await publishQLRasterCommand(printerName, base64)
